@@ -200,7 +200,7 @@ class PathDistance():
 # useful for accessing specific TSPMap objects via an implementation of __getitem__ for the whole class...
 class GetItem(type):
     def __getitem__(cls, key):
-        return cls._batch.get(key, "TSPMap object no found.")
+        return cls._batch.get(key, "TSPMap object not found.")
 
     def keys(cls):
         return cls.__batch.keys()
@@ -631,6 +631,83 @@ class TSPMapWithEdges(TSPMap):
             raise SearchFailed("The uniform-cost search failed to find the goal state")
     # end uninformed_search()
 
+    ##################################
+    # TSPMapWithEdges Plotting Methods:
+    ##################################
+
+    ##################################
+    #   plot_path() object method 
+    ##################################
+    # Plot a path for the problem, overlayed on top of the problem map
+    def plot_path(self, path: PathDistance, plot_title: str, save=False): 
+        ax = _plot_coords(self.map_coords,          # TSPMap coords
+                    self.str_to_coords(path),       # path coords
+                    self.nodes.keys(),              # vertex labels
+                    title = plot_title,
+                    write=False, # set to False to avoid double saving since we write below;
+                    plot_type="path",
+                    path_color='red'
+                    )
+        # iterate through our values, which are lists of PathDistance objects
+        for edges in self.__edges.values():
+            # iterate through our list to get our individual PathDistance objects
+            for edge in edges:
+                # for each PathDistance object, convert it to return a list of coordinates...            
+                path_coords = self.str_to_coords(edge)
+                # I know that my edges consist of two vertices... index 0 is starting vertex, index 1 is ending vertex
+                start_coords = path_coords[0]
+                end_coords = path_coords[1]
+                # 'xy' is the arrowhead location, xytext is the start of the arrow
+                # set zorder to -1 so that it is drawn first, so that it is behind the other elements
+                ax.annotate('', xy=end_coords, xytext=start_coords, zorder = -1,
+                            arrowprops=dict(lw=0.5, shrink = 0.05,
+                            facecolor='lightgrey'))
+       
+        if save:
+            # if we save the plot, we can use the title. But remove any suffixes first! (like .tsp) 
+            plt.savefig(plot_title + '_map.png', format='png')
+        else:
+            plt.show()
+    # end def plot_path()    
+
+    ##################################
+    #   plot_map() object method 
+    ##################################
+    # Plot the map, only. This shows the available vertices and their corresponding edges
+    def plot_map(self, save=False): 
+        ax = _plot_coords(self.map_coords,       # TSPMap coords
+                    None,                          # path coords
+                    self.nodes.keys(),             # vertex labels
+                    title = self.name,
+                    write=False,
+                    plot_type="map")
+
+        # iterate through our values, which are lists of PathDistance objects
+        for edges in self.__edges.values():
+            # iterate through our list to get our individual PathDistance objects
+            for edge in edges:
+                # for each PathDistance object, convert it to return a list of coordinates...            
+                path_coords = self.str_to_coords(edge)
+                # I know that my edges consist of two vertices... index 0 is starting vertex, index 1 is ending vertex
+                start_coords = path_coords[0]
+                end_coords = path_coords[1]
+                # 'xy' is the arrowhead location, xytext is the start of the arrow
+                # set zorder to -1 so that it is drawn first, so that it is behind the other elements
+                ax.annotate('', xy=end_coords, xytext=start_coords, zorder = -1,
+                            arrowprops=dict(lw=0.5, shrink = 0.05,
+                            facecolor='lightgrey'))
+        if save:
+            # if we save the plot, we can use the title. But remove any suffixes first! (like .tsp) 
+            plt.savefig(self.name + '_map.png', format='png')
+        else:
+            plt.show()
+    # end plot_map() definition
+
+
+
+
+
+#end TSPMapWithEdges class definition
 
 # Class for raising exceptions when a search algorithm fails to return a solution
 class SearchFailed(Exception):
@@ -752,7 +829,8 @@ def _plot_coords(tuples_list_map,
                 write=False,
                 suffix='.tsp',
                 plot_type='map',
-                path_label='path'
+                path_label='path',
+                path_color='blue'
                 ):
     '''
     Plots a list of tuples using matplotlib.pyplot
@@ -786,7 +864,7 @@ def _plot_coords(tuples_list_map,
         x_path, y_path = zip(*tuples_list_path)
         
         plt.scatter(x_list, y_list)   # plot scatter
-        plt.plot(x_path, y_path, label = path_label)      # overlay line
+        plt.plot(x_path, y_path, label = path_label, color=path_color)      # overlay line
 
     # Label each point
     for i, label in enumerate(vertex_labels):
@@ -794,8 +872,10 @@ def _plot_coords(tuples_list_map,
                      (x_list[i], y_list[i]), # coordinates at which we add the annotations
                      textcoords="offset points", # annotations will be offset
                      xytext=(0,7), # the offset distance of the annotation specified here by 13-points on y
-                     ha='center')   # horizontal alignment is centered over point
-
+                     ha='center',   # horizontal alignment is centered over point
+                     fontweight='bold',
+                     fontsize='12')   
+    plt.draw()
     plt.xlabel(x_lab)
     plt.ylabel(y_lab)
     plt.title(title)
@@ -805,5 +885,5 @@ def _plot_coords(tuples_list_map,
         # if we save the plot, we can use the title. But remove any suffixes first! (like .tsp) 
         plt.savefig(title.removesuffix(suffix) + '_map.png', format='png')
 
-    return plt
+    return plt.gca()
 # end _plot_coords() definition

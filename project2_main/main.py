@@ -23,6 +23,9 @@ import time # for timing individual function calls when timing was not implement
 
 def main():
 
+    ###################################
+    #   Initialize our Problem   
+    ###################################
     # Here, I hard-code the edges
     # The dict[str, list[tuple]] is converted to a corresponding dict[str, list[PathDistance]] in constructor
     edges = {}
@@ -43,7 +46,12 @@ def main():
 
     # Create an instance of our problem
     problem = tsp.TSPMapWithEdges("11PointDFSBFS.tsp", edges)
+    # Show the problem map
+    problem.plot_map(save=True)
 
+    ###################################
+    #   Breadth-first Search
+    ###################################
     # Specify breadth-first in uninformed_search() call
     _ = time.perf_counter()                     # start timer
     solution_path = problem.uninformed_search(start, goal, method="breadth-first")
@@ -56,7 +64,10 @@ def main():
 
     print("")
 
-    # Specify depth-first
+    ###################################
+    #   Depth-first Search
+    ###################################
+    # Specify depth-first in function call
     _ = time.perf_counter()
     solution_path = problem.uninformed_search(start, goal, method="depth-first")
     elapsed_time = time.perf_counter() - _
@@ -68,6 +79,9 @@ def main():
 
     print("")
 
+    ###################################
+    #   Uniform-cost Search
+    ###################################
     # Specify uniform-cost
     _ = time.perf_counter()
     solution_path = problem.uninformed_search(start, goal, method="uniform-cost")
