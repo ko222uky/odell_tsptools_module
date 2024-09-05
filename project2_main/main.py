@@ -78,13 +78,31 @@ def main():
             f.write(f"{elapsed_timeBFS:.6},{elapsed_timeDFS:.6},{elapsed_timeUCS:.6}\n")
     print("\nRuntimes written to 11PointDFSBFS_runtimes.csv")
 
-    # Read the file I just wrote
+    # Read the file I just wrote and perform the appropriate statistical tests
     runtimes = pd.read_csv("11PointDFSBFS_runtimes.csv")
-
+    statistic, p_value = stats.kruskal(runtimes["BFS"], runtimes["DFS"], runtimes["UCS"]) 
+    
     print("\nKruskal-Wallis Test for BFS, DFS, and UCS Runtimes")
-    statistic, p_values = stats.kruskal(runtimes["BFS"], runtimes["DFS"], runtimes["UCS"]) 
-    print(f"Kruskal-Wallis statistic: {statistic:.6f}")
-    print(f"P-value: {p_values}")
+    print(f"Test statistic value: {statistic}")
+    print(f"P-value: {p_value}")
+    print("")
+
+    # If sufficient variation exists such that a difference is detected, let's perform our post hoc tests 
+    # ... to tease apart what's statistically different from what
+    # We apply correction to deal with type-I error chance inflation due to more testing
+    
+    # pivot our dataframe into a long format
+    runtimes_long = pd.melt(runtimes, var_name='algorithm', value_name='runtimes')
+    
+    # Make sure you don't switch val_col and group_col, else you're in for some LONG process times (and wrong answers!)
+    post_hoc_results = sp.posthoc_dunn(runtimes_long,
+                                       val_col = 'runtimes',
+                                       group_col = 'algorithm',
+                                       p_adjust='bonferroni')
+    
+    print("Dunn's Post Hoc Results Table:")
+    print(post_hoc_results)
+    print("")
 
     ##################################
     #   Plotting the Solution Paths
