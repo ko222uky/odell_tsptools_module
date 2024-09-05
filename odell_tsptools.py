@@ -618,6 +618,7 @@ class TSPMapWithEdges(TSPMap):
                                                 # Weird...
                 if parent_path.current_vertex.label == goal: # We know, since we pop the highest priority, that if it's at the goal, we return
                     return parent_path
+                
                 for child_path in self._expand(parent_path, self.__edges):  # expand parent to see next possible options (i.e., children)
                     state = child_path.current_vertex.label      # get child's state, which is a next possible path's current vertex
                     # The next if-statement basically says: 
