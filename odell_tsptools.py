@@ -159,7 +159,8 @@ class PathDistance():
         return self
 
     def __iter__(self):
-        return self
+        for label in self.__current_path.split('-'):
+            yield label
 
     # Likewise, comparators are defined so we can compare different PathDistance objects.
     # Helpful for finding min or max paths!
@@ -533,15 +534,15 @@ class TSPMapWithEdges(TSPMap):
         current_path = PathDistance object whose current_vertex is being expanded to generate possible next paths
         edges = dictionary with vertex labels as keys and lists of PathDistance objects whose current_vertex is a possible next vertex
          '''
-        # This is what we will return. It will be a list of next possible paths
-        next_possible_paths = []
+
+
         # key our dictionary to access the hard-coded edges!
         for edge in edges[current_path.current_vertex.label]:
             # possible paths will be an extension, or addition to, our current path travelled.
             possible_path = copy.deepcopy(current_path) # copy our path
             possible_path += edge.current_vertex        # add our next vertex
-            next_possible_paths.append(possible_path)
-        return next_possible_paths
+            yield possible_path
+
 
     
     def uninformed_search(self, start: str, goal: str, method="breadth-first"):
@@ -598,12 +599,10 @@ class TSPMapWithEdges(TSPMap):
                 parent_path = frontier.pop()            # pop our frontier stack to get a parent
                 #print(f"Expanding {parent_path}")
                 for child_path in self._expand(parent_path, self.__edges):  # expand parent to see next possible options (i.e., children)
-                   state = child_path.current_vertex.label                  # get child's state, which is a next possible path's current vertex
-                   if state == goal:                                        # if the child reaches our goal, return our child PathDistance!
-                       return child_path
-                   if state not in reached.keys():      # otherwise, if the state is one we haven't been to...
-                       reached[state] = child_path      # add new dictionary entry keyed by state
-                       frontier.append(child_path)      # push the child path to the frontier stack
+                    state = child_path.current_vertex.label                  # get child's state, which is a next possible path's current vertex
+                    if state == goal:                                        # if the child reaches our goal, return our child PathDistance!
+                       return child_path                                    # we don't need to use {reached} dictionary for depth-first search
+                    frontier.append(child_path)                             # push the child path to the frontier stack
             raise SearchFailed("The depth-first search failed to find the goal state")
 
         ###################################
