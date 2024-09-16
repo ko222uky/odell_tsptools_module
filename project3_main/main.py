@@ -34,13 +34,15 @@ def main():
 
 
     problem = tsp.TSPMap("Random30.tsp")
-   
-    initial_vertices = [30,24,1]
-    # Why did I pick these initial vertices?
-
+    initial_vertices = [30, 1, 24]
     problem.closest_edge_insertion(initial_vertices, plot_steps=True, line_segment=True)
    
    
+    problem = tsp.TSPMap("Random40.tsp")
+    initial_vertices = [30, 1, 24]
+    problem.closest_edge_insertion(initial_vertices, plot_steps=True, line_segment=True)
+
+
 
     ###############################
     #   Runtime Iterations

@@ -114,6 +114,7 @@ class PathDistance():
         self.__current_path = path_str
         self.__current_vertex = vertex
         self.__current_distance = distance
+        self.__edges = None # Leave edges uncomputed for now... we'll use lazy computation
 
     # The appropriate getters for PathDistance
     @property
@@ -128,6 +129,52 @@ class PathDistance():
     def current_distance(self):
         return self.__current_distance
 
+    @property
+    def edges(self):
+        if self.__edges is None:
+            # Now we can compute it, since we need it.
+            self.__edges = self._calculate_edge()
+        return self.__edges
+
+    def _calculate_edge(self):
+        vertex_labels = self.__current_path.split('-') # get a list of our vertex labels
+        edge_dict = {} # edges will be stored as dictionary. Key will be in the form of '1-2' for vertices 1 and 2
+        for i in range(len(vertex_labels) - 1):
+            j = i + 1 # i and j to iterate through subsequent pairs of vertex labels
+            if j > len(vertex_labels):
+                break
+            # the key is the starting vertex, value is the ending vertex
+            edge_dict[vertex_labels[i]] = vertex_labels[j]
+        return edge_dict
+        
+    def _edge_insert(self, edge, vertex):
+        '''
+        Inserts an edge between two vertices in the current path.
+        NOTE: This method does not update the current distance nor path string.
+        Not intended for direct use by the user.
+        Requires TSPMap object to rebuild path.
+        '''
+        if self.__edges is None:
+            # Now we can compute it, since we need it.
+            self.__edges = self._calculate_edge()
+
+        edge_points = edge.split('-') # parse input edge string
+        if edge_points[0] not in self.__edges.keys():
+            raise ValueError("Edge does not exist in PathDistance object!")
+        else:
+            # edge parameter expected in format '1-3' for vertices 1 and 3
+      
+            # We can easily build our new edge. If it was '1-3' and we want to insert '2',
+            # ... we can build '1-2' and '2-3' and then delete '1-3'
+            # thus, '1' keys to vertex
+            # and vertex keys to '3'
+
+            self.__edges[edge_points[0]] = str(vertex.label)        # insert the new edge
+            self.__edges[str(vertex.label)] = edge_points[1]        # insert the new edge
+                      
+            # no need to delete the old edge, since we overwrote value at key edge_points[0]      
+                                                                         
+        return self.__edges # edge distances, and path strings, will be rebuilt via TSP object
 
     # Addition defined between PathDistance obj and Vertex obj, which updates self's instance attributes and returns self
     def __add__(self, other):
@@ -287,6 +334,10 @@ class TSPMap(metaclass=GetItem):
     #   Other methods... #
     ######################
 
+
+
+
+
     # What if we have a particular path in string form derived from vertices in this instance?
     # We can use a string to get either a list of (x, y) tuples OR a list of vertices...
 
@@ -382,6 +433,311 @@ class TSPMap(metaclass=GetItem):
         # brute force algorithm for constructing a tree wherein leaf nodes contain paths
         # would require a tree class     
         pass
+
+    ######################
+    # Greedy Edge Insertion for TSP 
+    ######################
+
+    def closest_edge_insertion(self, initial_vertices, plot_steps=False, line_segment=False):
+        
+        '''
+        Greedy algorithm for the TSP problem.
+        The closest edge insertion is a heuristic used in a greedy algorithm that builds a solution by iteratively adding the vertex that minimizes the total distance.
+        The vertex is added to the edge that is closest to the current path.
+        Distance to edge is approximated as a point projected to a line (whether infinite or finite)
+        The algorithm starts with a circular path from the initial vertices, usually 3 vertices.
+        
+        '''
+
+        solution_steps = [] # list of PathDistance objects representing the solution as it builds
+        step = 0 # counter for the number of steps taken    
+        unvisited_nodes = copy.deepcopy(self.__nodes)
+
+
+        # Construct circular path from initial vertices.
+        # Assumed to be triangular (3 vertices).
+        initial_tour = PathDistance(self[str(initial_vertices[0])].label, self[str(initial_vertices[0])], 0.0)
+        del unvisited_nodes[str(initial_vertices[0])]
+
+        for vertex_label in initial_vertices[1:]:
+
+            initial_tour += self.__nodes[str(vertex_label)]
+
+            # remove the node from our unvisited nodes
+            del unvisited_nodes[str(vertex_label)]
+
+        initial_tour += self[str(initial_vertices[0])] # close the loop
+        # print(initial_tour) # for testing
+        # print(unvisited_nodes.keys()) # for testing
+
+        # add the initial tour to our list of solution steps
+        solution_steps.append(initial_tour)
+        if plot_steps:
+            self.plot_path(initial_tour, "Step " + str(step), save=True)
+
+        next_tour = copy.deepcopy(initial_tour)
+
+        # print(step, next_tour) # for testing
+        
+        return self._recursive_closest_edge_insertion(next_tour,     # initial tour
+                                                      unvisited_nodes,  # unvisited nodes
+                                                      step,             # counter for the number of steps taken, for naming the plots
+                                                      solution_steps,   # list of PathDistance objects representing the solution as it builds
+                                                      plot_steps,       # specify whether we need to plot the steps, individually
+                                                      line_segment      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      )
+        # Now we can start the greedy edge insertion recursive call...
+        # Pass the initial tour and the unvisited nodes, and the solution steps list
+
+        #return self._recursive_closest_edge_insertion(self, initial_tour, unvisited_nodes, step, solution_steps)
+
+    def _recursive_closest_edge_insertion(self, tour, unvisited_nodes, step, solution_steps, plot_steps=False, line_segment=False):
+        '''
+        Recursive function for the closest edge insertion greedy algorithm.
+        This function is intended to be called by the closest_edge_insertion() method.
+        '''
+        # base case: if we have visited all nodes, we return the tour
+        if len(unvisited_nodes) == 0:
+            return tour, solution_steps
+
+        # for each vertex in our unvisited nodes, we find the closest edge to our current tour
+        # and insert the vertex into that edge. We do this until we find the added vertex that minimizes the total distance
+        # we then add the new tour to our list of solution steps
+
+        #############################
+        # initialize our min search;
+        # find the vertex that minimizes the total distance
+        # when added to the current tour
+        #############################
+
+        # make a deep copy of the current tour, to prevent weird stuff from happening
+        tour = copy.deepcopy(tour)
+
+        unvisited_nodes_keys = list(unvisited_nodes.keys())                    # keys of unvisited nodes
+                                                                               # we iterate through this key list to delete the vertex from the unvisited nodes
+
+        # dummy value for testing; we set the minimum to a HIGH value...
+        min_tour = PathDistance(path_str="", vertex=Vertex(), distance=99999) # initialize min_tour
+
+        # iterate through the rest of the unvisited nodes
+        # insert the vertex into the edge, one by one.
+        for vertex_label in unvisited_nodes_keys:
+
+            # get the vertex object from the label
+            vertex = self[vertex_label]
+
+            # make a deep copy of the original tour, to prevent headaches
+            # we will insert the vertex into the edge of this deep copy
+            temp_tour = copy.deepcopy(tour) # make a deep copy of the original tour
+
+            # find the closest edge to our current tour
+            closest_edge = self._find_closest_edge(temp_tour, vertex, line_segment)
+
+            # insert the vertex into the edge
+            # print(f"inserting {vertex_label} into edge {closest_edge} of {temp_tour}") # for testing
+
+            temp_tour = self._edge_insert(temp_tour, closest_edge, vertex)
+            # print(temp_tour) # for testing
+
+            if temp_tour < min_tour:
+                min_tour = temp_tour
+                min_vertex_label = vertex_label
+
+        # add the new tour to our list of solution steps
+        solution_steps.append(min_tour)
+
+        # remove the vertex from the unvisited nodes
+        del unvisited_nodes[min_vertex_label]
+
+        # print solution step
+        if plot_steps:
+            step += 1
+            self.plot_path(min_tour, "Step " + str(step), save=True)
+            # close plot
+            plt.close()
+
+        # commented-out print-statements that were used when testing...
+        # print("##############################################")
+        # print("Step " + str(step), ":", min_tour)
+        # print("##############################################")
+        # recursive call
+        return self._recursive_closest_edge_insertion(min_tour,         # new tour
+                                                      unvisited_nodes,  # unvisited nodes
+                                                      step,             # counter for the number of steps taken, for naming the plots
+                                                      solution_steps,   # list of PathDistance objects representing the solution as it builds
+                                                      plot_steps,       # specify whether we need to plot the steps, individually
+                                                      line_segment      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      )
+    # end of recursive_closest_edge_insertion() method  
+
+    def _find_closest_edge(self, tour, vertex, line_segment=False):
+        '''
+        Finds the closest edge to a given vertex in a given PathDistance object.
+        Returns the edge in format '1-2' for vertices 1 and 2.
+        '''
+        # Actually, we want to find the closest edge to a vertex in a given PathDistance object.
+        minimum_distance = float('inf') # set to infinity, a more pythonic way to do this
+        closest_edge = None
+
+        # iterate through all edges to find the closest edge
+        for edge_key, edge_points in self.calculate_edges(tour).items():
+
+            # find the distance from the vertex to the edge
+            distance = self._point_to_edge_distance(vertex, edge_points, line_segment)
+
+
+            if distance < minimum_distance:
+                minimum_distance = distance
+                closest_edge = edge_key
+
+        return closest_edge
+    # end of _find_closest_edge() method
+
+
+    def _point_to_edge_distance(self, vertex, edge_points, line_segment=False):
+        '''
+        Calculates the distance from a point to an edge.
+        Returns the distance.
+        NOTE: Caveat is whether we mean an infinite line or a line segment.
+        NOTE: Uses of 'infinite line' assumptions for an edge may give odd results.
+        NOTE: These odd results in TSP show up as cross-overs.
+        '''
+        # point is a tuple of (x, y) coordinates
+        # edge_points is a tuple of two tuples of (x, y) coordinates
+        # we calculate the distance from the point to the line segment defined by the edge points
+        # we return the distance; source: https://mathworld.wolfram.com/Point-LineDistance2-Dimensional.html
+
+        # unpack the edge points
+        x1, y1 = edge_points[0]
+        x2, y2 = edge_points[1]
+
+        # unpack the point
+        x0, y0 = vertex.coords
+
+        diff_x = x2 - x1
+        diff_y = y2 - y1
+
+        # distance between the two edge points
+        numerator = abs(diff_x * (y1 - y0) - (x1 - x0) * diff_y)
+        edge_length = math.sqrt(diff_x**2 + diff_y**2)
+
+        if not line_segment:
+            # The edge line is treated as infinite (i.e., not a line segment)
+
+            return numerator / edge_length
+        else:
+
+            # edge line treated as line segment
+            # More approximate measures may be needed.
+
+            # The edge is treated as a line segment
+            # Compute the projection scalar, that is the scalar that projects the point onto the line segment
+            #
+            projection_scalar = ((x0 - x1) * diff_x + (y0 - y1) * diff_y) / (edge_length**2)
+
+            if projection_scalar < 0:
+                # The projection point is beyond the first edge point,
+                # so we compute the distance from the point to the first edge point
+                # NOTE: This is a more approximate measure, and differs a lot from an infinite line
+                distance = math.sqrt((x1 - x0)**2 + (y1 - y0)**2)
+
+                return distance
+
+            elif projection_scalar > 1:
+                # The projection point is beyond the second edge point,
+                # so we compute the distance from the point to the second edge point
+                distance = math.sqrt((x2 - x0)**2 + (y2 - y0)**2)
+
+                return distance
+            
+            elif 0 <= projection_scalar <= 1:
+                # the point is within the line segment, so we compute the distance from the point to the projection point
+                # that is, the point on the line segment to which we projected the point
+                # Find the projection points on the segment
+                x_proj = x1 + projection_scalar * diff_x
+                y_proj = y1 + projection_scalar * diff_y
+        
+                # Compute the distance from the point to the projection point on the segment
+                distance = math.sqrt((x_proj - x0)**2 + (y_proj - y0)**2)
+
+                return distance
+    # end of _point_to_edge_distance() method
+
+
+
+    def calculate_edges(self, tour):
+        '''
+        Calculates the edges of a given PathDistance object.
+        Returns a dictionary of edges, where the key is in format '1-2' for vertices 1 and 2.
+        The values are pairs of vertex coordinates.
+        Mainly used to allow ease of access to edges, reconstructed from the path string.
+        '''
+        # Dictionary of edges, where the key is in format '1-2' for vertices 1 and 2
+        # values are pairs of vertex coordinates
+        edge_dict_coords = {}
+
+        # get our coordinates from the path string
+        coords = self.str_to_coords(tour)
+
+        # vertices list
+        vertex_labels = tour.current_path.split('-')
+
+
+        # iterate through our coordinates and build our edge dictionary
+        for i in range(len(coords) - 1):
+            # edge key is in format '1-2' for vertices 1 and 2
+            edge = vertex_labels[i] + '-' + vertex_labels[i+1]
+
+            # edge values are pairs of vertex coordinates
+            edge_dict_coords[edge] = (coords[i], coords[i+1])
+
+        return edge_dict_coords
+    # end of calculate_edges() method
+
+
+
+    def _edge_insert(self, tour, edge, vertex):
+        '''
+        Inserts vertex into edge of a given PathDistance object.
+        Reconstructs object and returns new object with updated path and distance.
+        NOTE: This reconstruction assumes no repeated vertices EXCEPT for the starting and ending vertices.
+        '''
+        # tour is a PathDistance object, which is a path that's currently being travelled
+        # by 'tour', we mean a circular path... so we can insert a vertex between two vertices in the path
+        # edge is a tuple of two vertex labels, which represent the edge we want to insert
+        # vertex is the Vertex object we want to insert between the two vertices in the edge
+        # we will return a new PathDistance object with the updated path and distance
+        # We use the PathDistance object's _edge_insert() method to do this,
+        # but the TSP object will be responsible for rebuilding the edge distances...
+
+        edge_dict = tour._edge_insert(edge, vertex)
+
+        edge_dict_keys = list(edge_dict.keys())
+
+        # key to starting vertex
+        starting_vertex_key = edge_dict_keys[0]
+        # our new tour will start with the first key (which is the starting vertex label)
+
+        # get starting vertex from the nodes dict and make new PathDistance object
+        new_tour = PathDistance(starting_vertex_key, self[starting_vertex_key], distance = 0.0)
+
+        # iterate for as many times as we have edges (i.e., same as number of keys)
+        for _ in range(len(edge_dict_keys)):
+
+            # The next edge point label to add is found using current vertex of our tour.
+            # and we use this point label as a key to access the next vertex in the self.__nodes
+            # I name my variables explicitly to show this.
+            next_vertex_key = edge_dict[new_tour.current_vertex.label]
+            next_vertex = self[next_vertex_key]        
+            new_tour += next_vertex # add the next vertex to our tour
+   
+        return copy.deepcopy(new_tour) # return the new tour, which is a PathDistance object  
+
+
+
+
+
+
 
     # object method to plot a particular path over the problem map
     def plot_path(self, path: PathDistance, plot_title: str, save=False): 
