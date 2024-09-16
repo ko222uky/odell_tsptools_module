@@ -75,7 +75,7 @@ def main():
     problem12 = tsp.TSPMap("Random12.tsp")     # N = 12 was NOT solvable for us with brute force;
     # vertices chosen because they were located away from the other points, near the egde of the map
     initial_vertices_12 = [6, 7, 10]
-    problem12.closest_edge_insertion(initial_vertices_12, plot_steps=True, line_segment=True)
+    problem12.closest_edge_insertion(initial_vertices_12, plot_steps=False, line_segment=True)
 
 
     ###############################
