@@ -643,12 +643,9 @@ class TSPMap(metaclass=GetItem):
 
                 return distance
 
-<<<<<<< HEAD
             #######################
             #   Test if the point is closer to one of the end points
             #######################
-=======
->>>>>>> 9d67874b1371405f7bf83456292eb99edc3b7156
             elif projection_scalar > 1:
                 # The projection point is beyond the second edge point,
                 # so we compute the distance from the point to the second edge point
