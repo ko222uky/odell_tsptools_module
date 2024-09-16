@@ -147,18 +147,25 @@ class PathDistance():
             edge_dict[vertex_labels[i]] = vertex_labels[j]
         return edge_dict
         
-    def _edge_insert(self, edge, vertex):
+    def _edge_insert(self, edge: str, vertex: Vertex):
         '''
-        Inserts an edge between two vertices in the current path.
+        Inserts an edge between two vertices in the current str path.
+        Returns the updated edge dictionary.
+
+        Parameters:
+        edge (str): the edge to insert the vertex into, in format '1-3' for, e.g., vertices 1 and 3
+        vertex (Vertex): the vertex to insert into the edge
+
         NOTE: This method does not update the current distance nor path string.
-        Not intended for direct use by the user.
-        Requires TSPMap object to rebuild path.
+        NOTE: Not intended for direct use by the user. Requires TSPMap object to rebuild path.
+        NOTE: Called by the TSPMap object's _edge_insert() method.
         '''
         if self.__edges is None:
             # Now we can compute it, since we need it.
             self.__edges = self._calculate_edge()
 
         edge_points = edge.split('-') # parse input edge string
+
         if edge_points[0] not in self.__edges.keys():
             raise ValueError("Edge does not exist in PathDistance object!")
         else:
@@ -438,7 +445,7 @@ class TSPMap(metaclass=GetItem):
     # Greedy Edge Insertion for TSP 
     ######################
 
-    def closest_edge_insertion(self, initial_vertices, plot_steps=False, line_segment=False):
+    def closest_edge_insertion(self, initial_vertices: list[str], plot_steps=False, line_segment=False):
         
         '''
         Greedy algorithm for the TSP problem.
@@ -446,6 +453,11 @@ class TSPMap(metaclass=GetItem):
         The vertex is added to the edge that is closest to the current path.
         Distance to edge is approximated as a point projected to a line (whether infinite or finite)
         The algorithm starts with a circular path from the initial vertices, usually 3 vertices.
+
+        Parameters:
+        initial_vertices (list): list of vertex labels to start the path
+        plot_steps (bool): whether to plot the steps of the algorithm
+        line_segment (bool): whether to calculate the distance to a finite line segment or an infinite line
         
         '''
 
@@ -472,6 +484,7 @@ class TSPMap(metaclass=GetItem):
 
         # add the initial tour to our list of solution steps
         solution_steps.append(initial_tour)
+
         if plot_steps:
             self.plot_path(initial_tour, "Step " + str(step), save=True)
 
@@ -491,7 +504,13 @@ class TSPMap(metaclass=GetItem):
 
         #return self._recursive_closest_edge_insertion(self, initial_tour, unvisited_nodes, step, solution_steps)
 
-    def _recursive_closest_edge_insertion(self, tour, unvisited_nodes, step, solution_steps, plot_steps=False, line_segment=False):
+    def _recursive_closest_edge_insertion(self, 
+                                          tour: PathDistance,                   # current (best) tour, greedy first choice
+                                          unvisited_nodes: dict[str, Vertex],   # unvisited nodes
+                                          step: int,                            # counter for the number of steps taken, for naming the plots
+                                          solution_steps: list[PathDistance],   # list of PathDistance objects representing the solution as it builds
+                                          plot_steps=False, 
+                                          line_segment=False):
         '''
         Recursive function for the closest edge insertion greedy algorithm.
         This function is intended to be called by the closest_edge_insertion() method.
@@ -513,8 +532,8 @@ class TSPMap(metaclass=GetItem):
         # make a deep copy of the current tour, to prevent weird stuff from happening
         tour = copy.deepcopy(tour)
 
-        unvisited_nodes_keys = list(unvisited_nodes.keys())                    # keys of unvisited nodes
-                                                                               # we iterate through this key list to delete the vertex from the unvisited nodes
+        unvisited_nodes_keys = list(unvisited_nodes.keys())     # keys of unvisited nodes
+                                                                # we iterate through this key list to delete the vertex from the unvisited nodes
 
         # dummy value for testing; we set the minimum to a HIGH value...
         min_tour = PathDistance(path_str="", vertex=Vertex(), distance=99999) # initialize min_tour
@@ -570,13 +589,22 @@ class TSPMap(metaclass=GetItem):
                                                       )
     # end of recursive_closest_edge_insertion() method  
 
-    def _find_closest_edge(self, tour, vertex, line_segment=False):
+    def _find_closest_edge(self, tour: PathDistance, vertex: Vertex, line_segment=False):
         '''
         Finds the closest edge to a given vertex in a given PathDistance object.
         Returns the edge in format '1-2' for vertices 1 and 2.
+
+        Parameters:
+        tour (PathDistance): the current tour, often a cyclical path
+        vertex (Vertex): the vertex for which we want to find the closest edge
+        line_segment (bool): whether we want to calculate the distance to a line segment or an infinite line
+
+        NOTE: This method is intended to be called by the _recursive_closest_edge_insertion() method.
         '''
         # Actually, we want to find the closest edge to a vertex in a given PathDistance object.
         minimum_distance = float('inf') # set to infinity, a more pythonic way to do this
+
+        # initialize the closest edge to None
         closest_edge = None
 
         # iterate through all edges to find the closest edge
@@ -594,10 +622,20 @@ class TSPMap(metaclass=GetItem):
     # end of _find_closest_edge() method
 
 
-    def _point_to_edge_distance(self, vertex, edge_points, line_segment=False):
+    def _point_to_edge_distance(self, vertex: Vertex,
+                                edge_points: tuple[tuple[float, float], tuple[float,float]], 
+                                line_segment=False):
         '''
         Calculates the distance from a point to an edge.
+        The edge points are a tuple of two tuples of (x, y) coordinates.
+        These are obtained via .calculate_edges() method for TSPMap object.
         Returns the distance.
+
+        Parameters:
+        vertex (Vertex): the vertex for which we want to find the distance to the edge
+        edge_points (tuple): a tuple of two tuples of (x, y) coordinates
+        line_segment (bool): whether we want to calculate the distance to a line segment or an infinite line
+
         NOTE: Caveat is whether we mean an infinite line or a line segment.
         NOTE: Uses of 'infinite line' assumptions for an edge may give odd results.
         NOTE: These odd results in TSP show up as cross-overs.
@@ -607,6 +645,8 @@ class TSPMap(metaclass=GetItem):
         # we calculate the distance from the point to the line segment defined by the edge points
         # we return the distance; source: https://mathworld.wolfram.com/Point-LineDistance2-Dimensional.html
 
+        # for comment purposes, let A = (x1, y1), B = (x2, y2), and P = (x0, y0)
+
         # unpack the edge points
         x1, y1 = edge_points[0]
         x2, y2 = edge_points[1]
@@ -614,6 +654,8 @@ class TSPMap(metaclass=GetItem):
         # unpack the point
         x0, y0 = vertex.coords
 
+        # together, these two differences define the vector AB.
+        # AB points from A to B
         diff_x = x2 - x1
         diff_y = y2 - y1
 
@@ -627,27 +669,43 @@ class TSPMap(metaclass=GetItem):
             return numerator / edge_length
         else:
 
-            # edge line treated as line segment
-            # More approximate measures may be needed.
 
-            # The edge is treated as a line segment
-            # Compute the projection scalar, that is the scalar that projects the point onto the line segment
-            #
+            ######################
+            # PROJECTION SCALAR
+            ######################
+            # Explanation of what the projection scalar is.
+            # The edge is treated as a line segment.
+            # Compute the projection scalar. This tells us how 'aligned' the vect
+            # The projection scalar involves the dot product between AP and AB
+            # The dot product between AP and AB tells us how aligned AP is with AB, i.e.,
+            # ... how much of AP is in the direction of AB.
+            # Since the trigonometric definition of the dot product gives us the angle between AP and AB, we know this:
+            # if the <AP, AB> = 0, then AP is orthogonal to AB, and the projection point is at A
+            # if the dot product <AP, AB> is positive, then the projection point is beyond A (pointing in same direction as AB)
+            # if the dot product <AP, AB> is negative, then the projection point is beyond B (pointing in opposite direction as AB)
+            # Next, we divide the projection scalar by the magnitude of the edge.
+            # This normalizes how 'well-aligned' AP is with AB in terms of the length of AB.
+            # If the projection scalar is in the interval [0, 1], we can find the point on the edge.
+            # Thus, to find the projection point, we multiply the projection scalar by AB.
+            # Otherwise, if the projection scalar is less than 0, the closest point would be A.
+            # And if the projection scalar is greater than 1, the closest point would be B.
+
             projection_scalar = ((x0 - x1) * diff_x + (y0 - y1) * diff_y) / (edge_length**2)
 
+            #######################
+            #   Test if the point P is closer to one of the end points A or B
+            #######################
+
             if projection_scalar < 0:
-                # The projection point is beyond the first edge point,
+                # The projection point is "behind" A,
                 # so we compute the distance from the point to the first edge point
                 # NOTE: This is a more approximate measure, and differs a lot from an infinite line
                 distance = math.sqrt((x1 - x0)**2 + (y1 - y0)**2)
 
                 return distance
 
-            #######################
-            #   Test if the point is closer to one of the end points
-            #######################
             elif projection_scalar > 1:
-                # The projection point is beyond the second edge point,
+                # The projection point is beyond the second edge point, B.
                 # so we compute the distance from the point to the second edge point
                 distance = math.sqrt((x2 - x0)**2 + (y2 - y0)**2)
 
@@ -668,12 +726,18 @@ class TSPMap(metaclass=GetItem):
 
 
 
-    def calculate_edges(self, tour):
+    def calculate_edges(self, tour: PathDistance):
         '''
         Calculates the edges of a given PathDistance object.
         Returns a dictionary of edges, where the key is in format '1-2' for vertices 1 and 2.
-        The values are pairs of vertex coordinates.
-        Mainly used to allow ease of access to edges, reconstructed from the path string.
+        The values are pairs of vertex coordinates, which are tuples of (x, y) coordinates.
+        The coordinate pairs allows us to calculate point-to-edge distances.
+
+        Parameters:
+        tour (PathDistance): the current tour, often a cyclical path
+
+        NOTE: distinct from the PathDistance's private _calculate_edge() method.
+        NOTE: The purpose of the _calculate_edge() method for paths is to enable easy instantiation of a new PathDistance object.
         '''
         # Dictionary of edges, where the key is in format '1-2' for vertices 1 and 2
         # values are pairs of vertex coordinates
@@ -699,10 +763,20 @@ class TSPMap(metaclass=GetItem):
 
 
 
-    def _edge_insert(self, tour, edge, vertex):
+    def _edge_insert(self, tour: PathDistance, edge: str, vertex: Vertex):
         '''
         Inserts vertex into edge of a given PathDistance object.
         Reconstructs object and returns new object with updated path and distance.
+        Uses the PathDistance object's _edge_insert() method to return a dictionary of edges,...
+        with key = starting vertex label, and value = ending vertex label.
+        This diction of edges defines the new PathDistance object after the insertion.
+        The TSP object will be responsible for rebuilding the edge distances, hence its own _edge_insert() function.
+        
+        Parameters:
+        tour (PathDistance): the current tour, often a cyclical path
+        edge (str): the edge to insert the vertex into, in format '1-3' for, e.g., vertices 1 and 3
+        vertex (Vertex): the vertex to insert into the edge
+
         NOTE: This reconstruction assumes no repeated vertices EXCEPT for the starting and ending vertices.
         '''
         # tour is a PathDistance object, which is a path that's currently being travelled
@@ -735,11 +809,7 @@ class TSPMap(metaclass=GetItem):
             new_tour += next_vertex # add the next vertex to our tour
    
         return copy.deepcopy(new_tour) # return the new tour, which is a PathDistance object  
-
-
-
-
-
+    # end of _edge_insert() method
 
 
     # object method to plot a particular path over the problem map
