@@ -25,24 +25,52 @@ import scikit_posthocs as sp    # for the post-hodc tests (Dunn's with Bonferoro
 #   main() function intended to be executed directly as script, not as an imported module
 #
 
-def main():
-
 
     ###################################
     #   Initialize our Problem   
     ###################################
 
+    
+    
+    # New problems too large for brute force
 
     problem = tsp.TSPMap("Random30.tsp")
-    initial_vertices = [30, 1, 24]
-    problem.closest_edge_insertion(initial_vertices, plot_steps=True, line_segment=True)
+    # initial vertices chosen because, after visual inspection of problem map,...
+    # ...they appear to be away from the center of the map, near a corner, and close to each other
+    initial_vertices_30 = [30, 1, 24]
+    problem.closest_edge_insertion(initial_vertices_30, plot_steps=False, line_segment=True)
    
    
     problem = tsp.TSPMap("Random40.tsp")
-    initial_vertices = [30, 1, 24]
-    problem.closest_edge_insertion(initial_vertices, plot_steps=True, line_segment=True)
+    # initial vertices chosen because, after visual inspection of problem map,...
+    # ...they appear to be away from the center of the map, near a corner, and close to each other
+    initial_vertices_40 = [30, 1, 24]
+    initial_vertices_
+    problem.closest_edge_insertion(initial_vertices_40, plot_steps=False, line_segment=True)
+
+    # Compare results for previous problems
+
+    problem = tsp.TSPMap("Random9.tsp")     # N = 9 was solvable for us with brute force; how does runtime compare?
+    # initial vertices chosen because, visual, they were closer together,...
+    # like a cluster
+    initial_vertices_9 = [8, 4, 9]
+    problem.closest_edge_insertion(initial_vertices_9, plot_steps=False, line_segment=True)
 
 
+    problem = tsp.TSPMap("Random10.tsp")    # N = 10 was solvable for us with brute force how does runtime compare?
+    # initial vertices chosen because they were located closer to a corner (bottom right-corner)
+    initial_vertices_10 = [6, 7, 8]    
+    problem.closest_edge_insertion(initial_vertices_10, plot_steps=False, line_segment=True)
+
+    problem = tsp.TSPMap("Random11.tsp")    # N = 11 was NOT solvable for us with brute force;
+    # vertices chosen because they were located near a corner, close together, at the edge of the points
+    initial_vertices_11 = [1, 2, 4]
+    problem.closest_edge_insertion(initial_vertices_11, plot_steps=False, line_segment=True)
+
+    problem = tsp.TSPMap("Random12.tsp")     # N = 12 was NOT solvable for us with brute force;
+    # vertices chosen because they were located away from the other points, near the egde of the map
+    initial_vertices_12 = [6, 7, 10]
+    problem.closest_edge_insertion(initial_vertices_12, plot_steps=True, line_segment=True)
 
     ###############################
     #   Runtime Iterations
