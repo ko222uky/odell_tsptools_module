@@ -30,15 +30,32 @@ def process_inputs():
     # try to parse inputs to get appropriate data types
     try:
         vertices = list(map(int, vertices_str.split(',')))
-        run_experiment(filename, vertices, steps, line_segment)
+        run_experiment(filename, vertices, steps, line_segment, vertices_str)
     except ValueError:
         messagebox.showerror("Error", "Please enter a valid list of integers separated by commas.")
 
-def run_experiment(filename, vertices, steps, line_segment):
+def run_experiment(filename, vertices, steps, line_segment, vertices_str):
+
+    # replace vertex_str commas with hyphens
+    vertices_str = vertices_str.replace(',', '-')
+
     # pas our processed inputs to instantiate our problem
     problem = tsp.TSPMap(filename)
-    problem.closest_edge_insertion(vertices, steps, line_segment)
+    solution, _ = problem.closest_edge_insertion(vertices, steps, line_segment)
     messagebox.showinfo("Success", f"Experiment run with filename: {filename} and vertices: {vertices}")
+    # write runtime to file
+    with open(vertices_str + "_closest_edge_insertion_runtimes_" + filename + ".csv", "w") as f:
+        f.write("starting: " + vertices_str + '\n')
+        for i in range(1000):           # 1000 iterations
+            _ = time.perf_counter()
+            problem.closest_edge_insertion(vertices)
+            elapsed_time = time.perf_counter() - _
+
+            # Write the elapsed times as tuple to file
+            f.write(f"{elapsed_time:.6}\n")
+
+    with open(vertices_str + "_solution_" + filename + ".csv", "w") as f:
+        f.write(str(solution))
 
 # Create the main window
 root = tk.Tk()
