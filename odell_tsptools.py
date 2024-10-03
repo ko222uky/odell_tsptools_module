@@ -319,11 +319,23 @@ class TSPMap(metaclass=GetItem):
     # this list represents all available verticies in our map (think geographical map)
     @property 
     def map_coords(self):
+        '''
+        Property
+        Returns a list of (x, y) tuples representing the vertices in the TSPMap instance
+        '''
         x_y_list = []
         for vertex in self.__nodes.values():
             # iterate through vertex values in our instance's dictionary and append (x, y) tuples
             x_y_list.append(vertex.coords)
         return x_y_list
+    
+    @property
+    def centroid(self):
+        '''
+        Property
+        Returns the centroid of the vertices in the TSPMap instance
+        '''
+        return self.find_centroid(self.map_coords)
 
     # Define a magic method for getting a particular vertex from our TSP map.
     # We can directly using indexing with our TSPMap object with the following:
@@ -349,6 +361,11 @@ class TSPMap(metaclass=GetItem):
     # We can use a string to get either a list of (x, y) tuples OR a list of vertices...
 
     def str_to_coords(self, path):
+        '''
+        Converts a path string to a list of (x, y) tuples.
+        The path string is expected to be in the format "1-2-3-4-5" where each number is a vertex label.
+        The method returns a list of (x, y) tuples representing the vertices in the path.
+        '''
         # We'll be flexible enough to take either the string directly OR the PathDistance obj
         if isinstance(path, PathDistance):
             path_string = path.current_path
@@ -381,6 +398,42 @@ class TSPMap(metaclass=GetItem):
         for key in vertex_keys:
             vertex_list.append(self.__nodes[key])
         return vertex_list
+    
+    def area_of_triangle_path(self, path):
+        '''
+        Calculates the area of the triangle formed by the vertices in the path.
+        The path is expected to be in the format "1-2-3" where each number is a vertex label.
+        The method returns the area of the triangle.
+        '''
+        # We'll be flexible enough to take either the string directly OR the PathDistance obj
+        if isinstance(path, PathDistance):
+            path_string = path.current_path
+        elif isinstance(path, str):
+            path_string = path
+        else:
+            raise TypeError("Argument 'path' must be either string or PathDistance object!")
+        
+        # get the vertices in the path
+        path_coords = self.str_to_coords(path_string)
+
+        # calculate the area of the triangle
+        return triangle_area(path_coords)
+    
+    def find_centroid(self, points: list[tuple[float, float]]):
+        if not points:
+            return None  # Return None if the list is empty to avoid division by zero
+        
+        # Sum the x and y coordinates separately
+        x_sum = sum(point[0] for point in points)
+        y_sum = sum(point[1] for point in points)
+        
+        # Calculate the mean for x and y
+        n = len(points)
+        centroid_x = x_sum / n
+        centroid_y = y_sum / n
+        
+        return (centroid_x, centroid_y)
+
 
     ######################
     # Algorithms for TSP #
@@ -445,7 +498,7 @@ class TSPMap(metaclass=GetItem):
     # Greedy Edge Insertion for TSP 
     ######################
 
-    def closest_edge_insertion(self, initial_vertices: list[str], plot_steps=False, line_segment=False):
+    def closest_edge_insertion(self, initial_vertices: list[str], plot_steps=False, line_segment=False, solution_directory_prefix=""):  
         
         '''
         Greedy algorithm for the TSP problem.
@@ -485,8 +538,16 @@ class TSPMap(metaclass=GetItem):
         # add the initial tour to our list of solution steps
         solution_steps.append(initial_tour)
 
+
         if plot_steps:
-            self.plot_path(initial_tour, "Step " + str(step), save=True)
+            initial_vertices_str = [str(x) for x in initial_vertices]
+
+            solution_directory_prefix = solution_directory_prefix + "_".join(initial_vertices_str) + "/"
+
+            self.plot_path(initial_tour, solution_directory_prefix + "Step " + str(step), save=True)
+            
+            # close plot
+            plt.close()
 
         next_tour = copy.deepcopy(initial_tour)
 
@@ -497,7 +558,8 @@ class TSPMap(metaclass=GetItem):
                                                       step,             # counter for the number of steps taken, for naming the plots
                                                       solution_steps,   # list of PathDistance objects representing the solution as it builds
                                                       plot_steps,       # specify whether we need to plot the steps, individually
-                                                      line_segment      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      line_segment,      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      solution_directory_prefix,            # prefix for the solution directory
                                                       )
         # Now we can start the greedy edge insertion recursive call...
         # Pass the initial tour and the unvisited nodes, and the solution steps list
@@ -510,7 +572,8 @@ class TSPMap(metaclass=GetItem):
                                           step: int,                            # counter for the number of steps taken, for naming the plots
                                           solution_steps: list[PathDistance],   # list of PathDistance objects representing the solution as it builds
                                           plot_steps=False, 
-                                          line_segment=False):
+                                          line_segment=False,
+                                          solution_directory_prefix=""):        # specify whether we need to plot the steps, individually
         '''
         Recursive function for the closest edge insertion greedy algorithm.
         This function is intended to be called by the closest_edge_insertion() method.
@@ -571,7 +634,7 @@ class TSPMap(metaclass=GetItem):
         # print solution step
         if plot_steps:
             step += 1
-            self.plot_path(min_tour, "Step " + str(step), save=True)
+            self.plot_path(min_tour, solution_directory_prefix + "Step " + str(step), save=True)
             # close plot
             plt.close()
 
@@ -585,7 +648,8 @@ class TSPMap(metaclass=GetItem):
                                                       step,             # counter for the number of steps taken, for naming the plots
                                                       solution_steps,   # list of PathDistance objects representing the solution as it builds
                                                       plot_steps,       # specify whether we need to plot the steps, individually
-                                                      line_segment      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      line_segment,      # specify whether we need to calc distance to a finite line (=True) or infinite line (=False)
+                                                      solution_directory_prefix                                                      
                                                       )
     # end of recursive_closest_edge_insertion() method  
 
@@ -725,7 +789,7 @@ class TSPMap(metaclass=GetItem):
     # end of _point_to_edge_distance() method
 
 
-
+    # The following method calculates the coordinates of the edges of a given PathDistance object.
     def calculate_edges(self, tour: PathDistance):
         '''
         Calculates the edges of a given PathDistance object.
@@ -815,7 +879,7 @@ class TSPMap(metaclass=GetItem):
     # object method to plot a particular path over the problem map
     def plot_path(self, path: PathDistance, plot_title: str, save=False): 
         plot = _plot_coords(self.map_coords,       # TSPMap coords
-                    self.str_to_coords(path),           # path coords
+                    self.str_to_coords(path),          # path coords
                     self.nodes.keys(),             # vertex labels
                     title = plot_title,
                     write=save,
@@ -1259,7 +1323,8 @@ def _plot_coords(tuples_list_map,
                 suffix='.tsp',
                 plot_type='map',
                 path_label='path',
-                path_color='blue'
+                path_color='blue',
+                prefix=''
                 ):
     '''
     Plots a list of tuples using matplotlib.pyplot
@@ -1311,8 +1376,27 @@ def _plot_coords(tuples_list_map,
     plt.legend()
     
     if write:
-        # if we save the plot, we can use the title. But remove any suffixes first! (like .tsp) 
-        plt.savefig(title.removesuffix(suffix) + '_map.png', format='png')
+        # if we save the plot, we can use the title. But remove any suffixes first! (like .tsp)
+        path = prefix + title.removesuffix(suffix) + '_map.png'  
+        plt.savefig(path, format='png')
 
     return plt.gca()
 # end _plot_coords() definition
+
+
+def triangle_area(tuples: list[tuple[float, float]]):
+    # Unpack the points into x and y coordinates
+    x1, y1 = tuples[0]
+    x2, y2 = tuples[1]
+    x3, y3 = tuples[2]
+    
+    # Apply the Shoelace formula
+    area = abs((x1*(y2 - y3) + x2*(y3 - y1) + x3*(y1 - y2)) / 2)
+    
+    return area
+
+def distance(tuple1: tuple[float, float], tuple2: tuple[float, float]):
+    '''
+    Returns the Euclidean distance between two points in 2D space.
+    '''
+    return math.sqrt((tuple1[0] - tuple2[0])**2 + (tuple1[1] - tuple2[1])**2)
