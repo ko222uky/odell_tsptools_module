@@ -8,6 +8,8 @@ import time # for the .time() method so that we can time how long the TSP algori
 import copy # to create deep copies when defining recursive methods
 import matplotlib.pyplot as plt # for plotting our lists of tuples, i.e., creating a 'geographical map'
 import queue # for implementing FIFO and priority queue for various search algorithms
+import numpy as np # used for random number generations, especially for the genetic algorithms
+
 
 # Python 3.12.4
 # Matplotlib version 3.8.4
@@ -130,15 +132,41 @@ class PathDistance():
         return self.__current_distance
 
     @property
+    def length(self):
+        
+        return len(self.__current_path.split('-'))
+
+
+    @property
     def edges(self):
         if self.__edges is None:
             # Now we can compute it, since we need it.
             self.__edges = self._calculate_edge()
         return self.__edges
+    
+    def split(self, split_point = 0.50):
+        '''
+        Takes a PathDistance objects and 'splits' it by return two lists of vertex labels.
+        first_chunk: list[str] containing vertex labels of the first half
+        second_chunk: list[str] containing vertex labels of the second half
+        split_point: integer that defines the division point, default 0.50  is a 50/50 division.
+        '''
+        first_chunk, second_chunk = [], []
+
+        # Convert split_point to an index
+        split_point = int(self.length * split_point)
+
+        for i in range(split_point):
+            first_chunk.append(self[i])
+
+        for j in range(split_point, self.length):
+            second_chunk.append(self[j])
+
+        return first_chunk, second_chunk
 
     def _calculate_edge(self):
         vertex_labels = self.__current_path.split('-') # get a list of our vertex labels
-        edge_dict = {} # edges will be stored as dictionary. Key will be in the form of '1-2' for vertices 1 and 2
+        edge_dict = {} # edges will be stored as dictionary. Key will be i and value is j for edge(i, j)
         for i in range(len(vertex_labels) - 1):
             j = i + 1 # i and j to iterate through subsequent pairs of vertex labels
             if j > len(vertex_labels):
@@ -209,8 +237,11 @@ class PathDistance():
     def __ne__(self, other):
          return self.__current_distance != other.__current_distance
 
-    def __getitem__(self, _):
-        return self
+    def __getitem__(self, index):
+        '''
+        Simple indexing of vertex labels in the PathDistance object.
+        '''
+        return self.__current_path.split('-')[index]
 
     def __iter__(self):
         for label in self.__current_path.split('-'):
@@ -433,6 +464,119 @@ class TSPMap(metaclass=GetItem):
         centroid_y = y_sum / n
         
         return (centroid_x, centroid_y)
+    ########################
+    # The following methods were added during Project 4, Genetic Algorithms
+    ########################
+    
+    def build_path(self, L: list[str]):
+        '''
+        Builds a PathDistance object given a list of vertex labels.
+        The vertex labels are used to key the problem map's nodes dictionary.
+        
+        '''
+        if isinstance(L, str):
+            # We assume it's a PathDistance path string '1-2-3-4-', for example
+            L = L.split('-')
+        # Initialize the PathDistance object by adding two Vertex objects
+        path = self.__nodes[str(L.pop())] + self.__nodes[str(L.pop())]
+
+        # builds the rest of our PathDistance
+        # We continue to work backwards, so we reverse our list.
+        for vertex_label in reversed(L):
+            path += self.__nodes[str(L.pop())]
+
+        return path
+    # end build_path()
+
+    def generate_random_paths(self, population_size: int):
+        '''
+        Random PathDistance objects using the problem map's vertices, with no replacement.
+        population size: int, specify the number of random paths to generate
+
+        Returns list of the PathDistance objects.
+        '''
+        
+        population = []
+
+        for i in range(population_size):
+            # Generate permutation of numbers from [1, self.dimension], where self.dimension is the # of vertices in the map
+            random_permutation = list(np.random.permutation(np.arange(1, self.dimension + 1)))
+            population.append(self.build_path(random_permutation))
+        
+        return population
+   
+    def rank_population(self, population):
+        '''
+        Sorts a list of PathDistance objects by their distance.
+        Returns dictionary with key = rank, value = PathDistance
+        '''
+        sorted_population = sorted(population)
+
+        ranked_population = {}
+
+        #in-place sort in ascending order. First element is the 'best' in terms of shorest distance
+        for i, path in enumerate(sorted_population):
+            rank = i + 1 # so our rank is from [1, population_size]
+            ranked_population[rank] = path
+        return ranked_population
+
+    def select_subpopulation(self, ranked_population: dict[int, PathDistance], sub_size):
+        '''
+        Takes a dictionary of rank, PathDistance objects and returns a subpopulation of size M
+        The returned subpopulation contains the top M individuals from the ranked population.
+        '''
+        
+        ranked_subpopulation = {}
+
+        for i in range(sub_size):
+            rank = i + 1
+            ranked_subpopulation[rank] = ranked_population[rank]
+
+        return ranked_subpopulation
+
+    def chunk_and_sweep(self, first_parent: PathDistance, second_parent: PathDistance, split_num: float):
+        '''
+        One of the cross-over functions for intended use within the reproduce() function.
+
+        Takes two parental PathDistance objects and returns four offspring PathDistance objects.
+        split_num: float, is passed to the PathDistance .split() method to return two chunks
+        '''
+        ################
+        # Chunk
+        ################
+        # Find our 'chunks' of our paths. Each parent contributes two 'gametes', so to speak
+        first_chunk1, first_chunk2 = first_parent.split(split_num)
+        
+        second_chunk1, second_chunk2 = second_parent.split(split_num)
+
+        ################
+        # Sweep
+        ################
+        # grab a chunk, sweep through the other parent and build the offspring!
+        # build first parent's gametes using second parent's body
+
+        for vertex in second_parent:
+            if vertex not in first_chunk1:
+                first_chunk1.append(vertex)
+
+            if vertex not in first_chunk2:
+                first_chunk2.append(vertex)
+        
+        # build second parent's gametes using first parent's body
+        for vertex in first_parent:
+            if vertex not in second_chunk1:
+                second_chunk1.append(vertex)
+            
+            if vertex not in second_chunk2:
+                second_chunk2.append(vertex)
+        # Build the PathDistance objects using our lists.
+        
+        offspring_lists = [first_chunk1, first_chunk2, second_chunk1, second_chunk2]
+
+        offspring = list(self.build_path(o) for o in offspring_lists)
+
+        return offspring
+
 
 
     ######################
