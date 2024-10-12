@@ -111,11 +111,37 @@ def main():
     print(first_parent)
     print(second_parent)
 
+    # Generate offspring with the chunk_and_sweep crossover method
     offspring = problem12.chunk_and_sweep(first_parent, second_parent, 0.5)
+    
     print("Here are the offspring")
+    
     for o in offspring:
         print(o)
+    
+    # We have four offspring returned. Let's select the best one:
+    print("Select the best offspring")
+    best_offspring = sorted(offspring)[0]
+    print(best_offspring)
+    
+    # Now, we can mutate the best offspring. We call the simple_mutate() function to swap two vertices
+    mutated_best_offspring = problem12.simple_mutate(best_offspring, 1)
+    print("Here is the mutated offspring:")
+    print(mutated_best_offspring)
 
+
+    # Or, we can mutate all of the four offspring and see which one turned out the best!
+    print("Mutate all offspring with probability 0.5 and return: ")
+    mutated_offspring = [problem12.simple_mutate(o, mutation_probability = 0.5) for o in offspring]
+    for mo in mutated_offspring:
+        print(mo)
+    print("The best offspring after mutation: ")
+    print(sorted(mutated_offspring)[0])
+
+
+
+    # Test the genetic algorithm
+    problem12.genetic_algorithm(generations = 10)
 
 
 
