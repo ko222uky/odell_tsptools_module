@@ -137,6 +137,7 @@ def main():
         print(mo)
     print("The best offspring after mutation: ")
     print(sorted(mutated_offspring)[0])
+<<<<<<< HEAD
 
 
 
@@ -145,6 +146,8 @@ def main():
 
 
 
+=======
+>>>>>>> 48d669d3b31b0985ad0d44e1d5de8120ed424cbf
     ###############################
     #   Runtime Iterations
     ###############################
