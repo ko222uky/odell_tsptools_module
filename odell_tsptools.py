@@ -8,7 +8,9 @@ import time # for the .time() method so that we can time how long the TSP algori
 import copy # to create deep copies when defining recursive methods
 import matplotlib.pyplot as plt # for plotting our lists of tuples, i.e., creating a 'geographical map'
 import queue # for implementing FIFO and priority queue for various search algorithms
-import numpy as np # used for random number generations, especially for the genetic algorithms
+import numpy as np # used for random number array generations, especially for the genetic algorithms
+import random # for random SINGLE number generations, especially for getting a quick probability check
+import pandas as pd # to create DataFrame objects for genetic algorithm, allowing for later plotting and what-not
 
 
 # Python 3.12.4
@@ -472,7 +474,9 @@ class TSPMap(metaclass=GetItem):
         '''
         Builds a PathDistance object given a list of vertex labels.
         The vertex labels are used to key the problem map's nodes dictionary.
-        
+        NOTE: Returned paths will be in reverse order compared to the passed list of labels.
+        This is due to using pop() to build the path. Of course, a path is equivalent to its inverse.
+        So, this is not a problem.
         '''
         if isinstance(L, str):
             # We assume it's a PathDistance path string '1-2-3-4-', for example
@@ -538,7 +542,9 @@ class TSPMap(metaclass=GetItem):
         '''
         One of the cross-over functions for intended use within the reproduce() function.
 
-        Takes two parental PathDistance objects and returns four offspring PathDistance objects.
+        Takes two parental PathDistance objects and returns four offspring lists with vertex labels.
+        We return a list because this is easier to mutate. The final offspring is built after the mutation step.
+
         split_num: float, is passed to the PathDistance .split() method to return two chunks
         '''
         ################
@@ -577,8 +583,142 @@ class TSPMap(metaclass=GetItem):
 
         return offspring
 
+    def simple_mutate(self, path: PathDistance, mutation_probability = 1):
+        '''
+        Simple mutation that picks two indices in a path and swaps the vertices.
+        We assume that the mutation rate is handled outside of the function call.
+        '''
+        if random.uniform(0, 1) > mutation_probability:
+            # Probability results in the mutation NOT occuring; return back path
+            return path
+
+        # Get a list of the path, so that we can mutate it.
+        protopath = path.current_path.split('-')
+        # Generate a random number between lower (0) and upper (path.length - 1)
+        # Do this twice, one for each position that we will swap
+        first_position = random.randint(0, path.length - 1)
+        second_position = random.randint(0, path.length - 1)
+        # if the second number is the same, keep generating until we get a different number
+        while (second_position == first_position):
+            second_position = random.randint(0, path.length - 1)
+        protopath[first_position], protopath[second_position] = protopath[second_position], protopath[first_position]
+
+        return self.build_path(protopath)
+
+    def reproduce(self,
+                  parent_rank_df,
+                  rank_min,
+                  rank_max,
+                  ranked_subpopulation: dict[int, PathDistance],
+                  population_size, 
+                  parent_subpop_size,
+                  lambda_param,
+                  crossover_method, 
+                  crossover_split_point, 
+                  mutation_prob
+                  ):
+
+        print("our ranked subpopulation")
+        for key, value in ranked_subpopulation.items():
+            print(f"rank {key} and  {value}")
+
+        ##############################
+        # Poisson Distribution for Parental Reproduction
+        #############################
+       
+        offspring_size = int(population_size - parent_subpop_size) # so parent subpop + offspring subpop should reconstitute population size
+        
+        # First, determine distribution of parent reproductive events
+        offspring_counts = np.random.poisson(lambda_param, offspring_size)
+    
+        # Clamp the Poisson values to the rank range [rank_min, rank_max]
+        offspring_counts_clamped = np.clip(offspring_counts, rank_min, rank_max)
+    
+        # Count the distribution of clamped offspring counts
+        parent_rank, parent_offspring_number  = np.unique(offspring_counts_clamped, return_counts=True)
+    
+        # Zip the two arrays into a dictionary
+        rank_offspring_dict = dict(zip(parent_rank, parent_offspring_number))
+    
+        # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
+        df_single_generation = pd.DataFrame([rank_offspring_dict])
+    
+        pd.concat([parent_rank_df, df_single_generation], ignore_index=True)
+        print("Distribution of reproductive events to respective ranks")
+        print(rank_offspring_dict) # we use this to portion out the reproductive events
 
 
+        if crossover_method == 'chunk_and_sweep':
+            print(f"Crossover split point: {crossover_split_point}")
+            
+            print(f"mutation probability: {mutation_prob}")
+
+        
+    # end reproduce()
+            
+
+        
+
+
+    def genetic_algorithm(self, 
+                          generations = 100,                # the number of iterations, i.e., population generations.
+                          population_size = 100,            # the max size of our population each generation 
+                          subpop_proportion = 0.1,          # the portion of population chosen to repopulate the next generation
+                          lambda_param = 1,                 # Poisson distribution param of reproduction opportunities within parental subpop
+                          crossover_method = 'chunk_and_sweep', # define the crossover method
+                          crossover_split_point = 0.5,          # define the 'split point' for crossovers. 
+                          mutation_prob = 0.1                   # mutation probability. Random floats between [0, 1] below this -> mutate
+                          ):
+        
+    
+
+        #######################
+        # other parameters
+        #######################
+        parent_subpop_size = int(np.ceil(population_size * subpop_proportion))
+
+        rank_min = 1            # the 'best' parental rank, i.e., #1 is best!
+        rank_max = parent_subpop_size  # the 'worst' parental rank
+
+
+        ##################################
+        # Initialize results storage here
+        ##################################
+
+        #######################
+        # parent-rank offspring-number DataFrame
+        ########################
+        # column names
+        all_possible_columns = np.arange(1, parent_subpop_size + 1)
+        # empty DataFrame initialized with column names
+        parent_rank_offspring_number_df = pd.DataFrame(columns=all_possible_columns)
+
+        ############################################
+        # Generate the first population here!
+        ############################################
+
+        new_population = self.generate_random_paths(population_size)
+
+        ranked_population = self.rank_population(new_population)
+        
+        parent_subpopulation = self.select_subpopulation(ranked_population, parent_subpop_size)
+
+        for _ in range(generations):
+            self.reproduce(parent_rank_offspring_number_df,
+                           rank_min,
+                           rank_max,
+                           parent_subpopulation ,
+                           population_size,
+                           parent_subpop_size,
+                           lambda_param,
+                           crossover_method,
+                           crossover_split_point,
+                           mutation_prob
+                           )
+ 
+        parent_rank_offspring_number_df.to_csv('test_parent_rank.csv')
+
+          
     ######################
     # Algorithms for TSP #
     ######################
