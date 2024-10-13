@@ -740,7 +740,10 @@ class TSPMap(metaclass=GetItem):
                           split_lower = 0.1,
                           split_upper = 0.9,                     # define the 'split point' for crossovers. 
                           mutation_prob = 0.1,                   # mutation probability. Random floats between [0, 1] below this -> mutate
-                          save_data = True
+                          abominate_threshold = float('inf'),
+                          save_data = True,
+                          file_path = '.',
+                          run_number = 0
                           ):
         
         '''
@@ -789,6 +792,7 @@ class TSPMap(metaclass=GetItem):
         best_path = PathDistance(path_str = '', distance = float('inf'))    # inf distance is the worst, so we initialize best to this
         worst_path = PathDistance(path_str = '', distance = float('-inf'))  # -inf is the best, so we initialize the worst to this
 
+        abominate_count = 0
         ############################################
         # Initialize the first random population here!
         ############################################
@@ -863,13 +867,20 @@ class TSPMap(metaclass=GetItem):
 
             # rank_min is the key for this generation's best!
             if ranked_population[rank_min] < best_path:
-                 best_path = ranked_population[rank_min]
-
+                best_path = ranked_population[rank_min]
+            elif ranked_population[rank_min] == best_path:
+                abominate_count += 1
             # rank_max is the key for this generation's worst!
             if ranked_population[rank_max] > worst_path:
-                 worst_path = ranked_population[rank_max]
+                worst_path = ranked_population[rank_max]
+            
 
             parent_subpopulation = self.select_subpopulation(ranked_population, parent_subpop_size)
+
+            
+            if abominate_count > abominate_threshold:
+                # Assign random path to the worst parent
+                parent_subpopulation[rank_max] = self.generate_random_paths(1)[0]
 
         # Final formatting for the DataFrames to be written to .csv 
         # Modify the column names by placing 'r' in the front, to denote rankings
@@ -880,7 +891,7 @@ class TSPMap(metaclass=GetItem):
             # Process the reproductive event distribution data
             parent_rank_offspring_number_df.columns  = ['r' + str(col) for col in parent_rank_offspring_number_df.columns]
             parent_rank_offspring_number_df.index.name = 'generation'
-            parent_rank_offspring_number_df.to_csv('parent_rank_offspring_number_df.csv')
+            parent_rank_offspring_number_df.to_csv(f'{file_path}/events/run_{run_number}_parent_rank_offspring_number_df.csv')
             
 
             ########################
@@ -897,7 +908,7 @@ class TSPMap(metaclass=GetItem):
 
             ga_run_df.columns = ['rank_' + str(col) for col in ga_run_df.columns]
             ga_run_df.index.name = 'generation'
-            ga_run_df.to_csv('ga_run_df.csv')
+            ga_run_df.to_csv(f'{file_path}/ga/run_{run_number}_ga_run_df.csv')
             print("Data saved.")
 
         print("Genetic algorithm run complete. The best and worst of this run are: ")

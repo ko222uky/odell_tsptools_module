@@ -13,7 +13,7 @@ import scikit_posthocs as sp    # for the post-hodc tests (Dunn's with Bonferoro
                                 # $ pip install scikit_posthocs
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import os
 # ====================================================================
 #   conda environment created with name 'cse545'
 #   environment used conda install to install following:
@@ -146,45 +146,107 @@ def main():
     #############################################
     # MAIN TEST HERE
     #############################################
+    
+    # directories for results
+    os.makedirs('results', exist_ok=True)
+
+    # filename
+    filename = 'Random100.tsp'
+    run_title = 'my_run'
+
+    run_directory = f'results/{run_title}_{filename.rstrip(".tsp")}'
+    
+    # directories for runs
+    os.makedirs(run_directory, exist_ok=True)
+    os.makedirs(f'{run_directory}/csv', exist_ok=True)    
+    os.makedirs(f'{run_directory}/csv/ga', exist_ok=True)    
+    os.makedirs(f'{run_directory}/csv/events', exist_ok=True)    
+    ##########################################################################
     # Parameters:
-    G = 10
-    N = 100
+    ############
+    G = 1 
+    N = 10
     percent_preserved = 0.2
     lambda_value = 10 
     xover_method = 'chunk_and_sweep'
     lower = 0.1
     upper = 0.9
     mutation_rate = 0.5
+    abominate_threshold_value = 1
+    runs = 22       # how many times to run the GA?
+    ###########################################################################
 
-    # Test the genetic algorithm
+    # save the parameters for this run as .csv
+    with open(f'{run_directory}/parameters_{filename}.csv', 'w') as file:
+        file.write("G,N,percent_preserved,lambda_value,xover_method,lower,upper,mutation_rate,abomination_threshold_value,runs\n")
+        file.write(f"{G},{N},{percent_preserved},{lambda_value},{xover_method},{lower},{upper},{mutation_rate},{abominate_threshold_value},{runs}")
     
-    _ = time.perf_counter()    
-    best, worst = problem12.genetic_algorithm(generations = G,
+    # create our TSPMap object
+    problem = tsp.TSPMap(filename)
+
+    ####################
+    # Best paths of run series
+    ####################
+
+    best_path = tsp.PathDistance('', distance = float('inf'))
+
+    worst_path = tsp.PathDistance('', distance = float('-inf'))
+    
+    # BEGIN GA RUN SERIES
+    
+    latest_run = 0
+
+    with open(f'{run_directory}/run_series_best_worst_and_runtime.csv', 'w') as file:
+        file.write('run_number,best_path,best_distance,worst_path,worst_distance,run_time')
+
+        run_start = time.perf_counter()
+        for run in range(runs):
+            latest_run = run # to reference specific .csv to plot. We plot the late run's individual data for demonstration purposes
+            
+            _ = time.perf_counter()    
+            best, worst = problem.genetic_algorithm(generations = G,
                                 population_size = N,
                                 subpop_proportion = percent_preserved,
                                 lambda_param = lambda_value,
                                 crossover_method = xover_method,
                                 split_lower = lower,
                                 split_upper = upper,
-                                mutation_prob = mutation_rate
+                                mutation_prob = mutation_rate,
+                                abominate_threshold = abominate_threshold_value,
+                                save_data=True,
+                                file_path = run_directory +'/csv',
+                                run_number = latest_run
                                 )
-    elapsed_t = time.perf_counter() - _
+            elapsed_t = time.perf_counter() - _
+            
+            # record data on best and worst per run
+            file.write(f'{_},{best.current_path},{best.current_distance},{worst.current_path},{worst.current_distance},{elapsed_t}')
+            
+            # Same the best and worst path of this run
+            if best < best_path:
+                best_path = best
+            if worst > worst_path:
+                worst_path = worst
 
-    print(f"Runtime: {elapsed_t} seconds")
-    
-    problem12.plot_path(best, 'Best: Distance = ' + str(best.current_distance) + '\nN = ' + str(problem12.dimension), save=True)
-    
-    plt.show()
+            print(f"Single Runtime: {elapsed_t} seconds")
+        run_elapsed = run_start - time.perf_counter()
+        print(f"Total runtime for the series of runs: {run_elapsed}")
 
-    problem12.plot_path(worst, 'Worst: Distance = ' + str(worst.current_distance) + '\nN = ' + str(problem12.dimension), save=True)
+        print("Plotting the best and worst path from the run series...")
 
-    plt.show()
+        problem.plot_path(best, 'Best: Distance = ' + str(best.current_distance) + '\nN = ' + str(problem.dimension), save=False)
+        plt.savefig(f'{run_directory}/best_{str(best.current_distance)}.png')
+        plt.show()
+
+        problem.plot_path(worst, 'Worst: Distance = ' + str(worst.current_distance) + '\nN = ' + str(problem.dimension), save=False)
+        plt.savefig(f'{run_directory}/worst_{str(best.current_distance)}.png')
+        plt.show()
 
     ##################################################################
     # PLOT THE MAIN DATA HERE
     ##################################################################
     # read in the .csv that our GA wrote
-    complete_rank_offspring_df = pd.read_csv('parent_rank_offspring_number_df.csv', index_col=0)
+    complete_rank_offspring_df = pd.read_csv(f'{run_directory}/csv/events/run_{latest_run}_parent_rank_offspring_number_df.csv', index_col=0)
 
 
     # Replace infinite values with NaN in the DataFrame before plotting
@@ -207,7 +269,7 @@ def main():
     plt.xlabel('Parent Ranks')
     plt.ylabel('Reproductive Events')
     plt.title(f'Distribution of Reproductive Events by Parent Ranks\nLambda = {lambda_value}' )
-
+    plt.savefig(f'{run_directory}/reproduction_distribution_figure')
     plt.show()
 
 
@@ -216,7 +278,7 @@ def main():
     # GA Run Data Plot
     ############################################
 
-    df = pd.read_csv('ga_run_df.csv')
+    df = pd.read_csv(f'{run_directory}/csv/ga/run_{latest_run}_ga_run_df.csv')
 
     # Plotting
     x = df['generation']  # X-axis (row identifiers)
@@ -235,7 +297,7 @@ def main():
     plt.ylabel('Distance')
     plt.title('Population Fitness with Increasing Generations')
     plt.legend()
-
+    plt.savefig(f'{run_directory}/population_fitness_trend_figure')
     plt.show()
 
 
