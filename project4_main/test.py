@@ -6,10 +6,14 @@
 import odell_tsptools as tsp    # My custom module
 import time                     # for timing individual function calls when timing was not implemented in my module
 import pandas as pd             # for reading runtime data which I wrote to CSV file
+import numpy as np
 import scipy.stats as stats     # for the Kruskal-Wallis test
 import scikit_posthocs as sp    # for the post-hodc tests (Dunn's with Bonferoroni correction)
                                 # Needs to be installed using pip:
                                 # $ pip install scikit_posthocs
+import matplotlib.pyplot as plt
+import seaborn as sns
+
 # ====================================================================
 #   conda environment created with name 'cse545'
 #   environment used conda install to install following:
@@ -137,24 +141,104 @@ def main():
         print(mo)
     print("The best offspring after mutation: ")
     print(sorted(mutated_offspring)[0])
-<<<<<<< HEAD
 
 
+    #############################################
+    # MAIN TEST HERE
+    #############################################
+    # Parameters:
+    G = 10
+    N = 100
+    percent_preserved = 0.2
+    lambda_value = 10 
+    xover_method = 'chunk_and_sweep'
+    lower = 0.1
+    upper = 0.9
+    mutation_rate = 0.5
 
     # Test the genetic algorithm
-    problem12.genetic_algorithm(generations = 10)
+    
+    _ = time.perf_counter()    
+    best, worst = problem12.genetic_algorithm(generations = G,
+                                population_size = N,
+                                subpop_proportion = percent_preserved,
+                                lambda_param = lambda_value,
+                                crossover_method = xover_method,
+                                split_lower = lower,
+                                split_upper = upper,
+                                mutation_prob = mutation_rate
+                                )
+    elapsed_t = time.perf_counter() - _
+
+    print(f"Runtime: {elapsed_t} seconds")
+    
+    problem12.plot_path(best, 'Best: Distance = ' + str(best.current_distance) + '\nN = ' + str(problem12.dimension), save=True)
+    
+    plt.show()
+
+    problem12.plot_path(worst, 'Worst: Distance = ' + str(worst.current_distance) + '\nN = ' + str(problem12.dimension), save=True)
+
+    plt.show()
+
+    ##################################################################
+    # PLOT THE MAIN DATA HERE
+    ##################################################################
+    # read in the .csv that our GA wrote
+    complete_rank_offspring_df = pd.read_csv('parent_rank_offspring_number_df.csv', index_col=0)
 
 
+    # Replace infinite values with NaN in the DataFrame before plotting
+    complete_rank_offspring_df = complete_rank_offspring_df.replace([np.inf, -np.inf], np.nan)
 
-=======
->>>>>>> 48d669d3b31b0985ad0d44e1d5de8120ed424cbf
-    ###############################
-    #   Runtime Iterations
-    ###############################
-    # Run the algorithms several times to get some average runtime data
-    # Runtime for each of the old problems...
-    # Runtime for each of the old problems...
-    # Format it as a comma-separated file
+
+    # Reset the DataFrame index to ensure proper plotting in Seaborn
+    df_reset = complete_rank_offspring_df.reset_index(drop=True)
+
+
+    # Melt the DataFrame, allowing seaborn to handle the data 
+    df_melted = pd.melt(df_reset, var_name='Column', value_name='Events')
+
+
+    # Plot the line graph with Seaborn (now using errorbar='sd' for shaded error bars)
+    plt.figure(figsize=(10, 6))
+    sns.lineplot(data=df_melted, x='Column', y='Events', errorbar='sd')
+
+    # Add labels and title
+    plt.xlabel('Parent Ranks')
+    plt.ylabel('Reproductive Events')
+    plt.title(f'Distribution of Reproductive Events by Parent Ranks\nLambda = {lambda_value}' )
+
+    plt.show()
+
+
+    
+    ############################################
+    # GA Run Data Plot
+    ############################################
+
+    df = pd.read_csv('ga_run_df.csv')
+
+    # Plotting
+    x = df['generation']  # X-axis (row identifiers)
+    y = df['rank_average']  # Average
+    sem = df['rank_SEM']  # Standard Error of the Mean
+
+    plt.plot(x, df['rank_min'], label='Min', color='blue', linestyle='--')
+    plt.plot(x, df['rank_max'], label='Max', color='red', linestyle='--')
+    plt.plot(x, y, label='Average', color='green')
+
+    # Plot the SEM as shaded region
+    plt.fill_between(x, y - sem, y + sem, color='green', alpha=0.2, label='±SEM')
+
+    # Add labels and legend
+    plt.xlabel('Generation #')
+    plt.ylabel('Distance')
+    plt.title('Population Fitness with Increasing Generations')
+    plt.legend()
+
+    plt.show()
+
+
 
 
 # end main()

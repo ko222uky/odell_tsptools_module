@@ -156,7 +156,7 @@ class PathDistance():
         first_chunk, second_chunk = [], []
 
         # Convert split_point to an index
-        split_point = int(self.length * split_point)
+        split_point = int(np.ceil(self.length * split_point))
 
         for i in range(split_point):
             first_chunk.append(self[i])
@@ -386,10 +386,6 @@ class TSPMap(metaclass=GetItem):
     #   Other methods... #
     ######################
 
-
-
-
-
     # What if we have a particular path in string form derived from vertices in this instance?
     # We can use a string to get either a list of (x, y) tuples OR a list of vertices...
 
@@ -453,6 +449,10 @@ class TSPMap(metaclass=GetItem):
         return triangle_area(path_coords)
     
     def find_centroid(self, points: list[tuple[float, float]]):
+        '''
+        Takes a list of (x, y) coordinates, i.e., tuples of floats
+        '''
+
         if not points:
             return None  # Return None if the list is empty to avoid division by zero
         
@@ -466,6 +466,11 @@ class TSPMap(metaclass=GetItem):
         centroid_y = y_sum / n
         
         return (centroid_x, centroid_y)
+
+    ##########################################################################
+    # GENETIC ALGORITHM (Project_4)
+    #########################################################################
+
     ########################
     # The following methods were added during Project 4, Genetic Algorithms
     ########################
@@ -505,11 +510,12 @@ class TSPMap(metaclass=GetItem):
         for i in range(population_size):
             # Generate permutation of numbers from [1, self.dimension], where self.dimension is the # of vertices in the map
             random_permutation = list(np.random.permutation(np.arange(1, self.dimension + 1)))
+            # Build the PathDistance and append
             population.append(self.build_path(random_permutation))
         
         return population
    
-    def rank_population(self, population):
+    def rank_population(self, population: list[PathDistance]):
         '''
         Sorts a list of PathDistance objects by their distance.
         Returns dictionary with key = rank, value = PathDistance
@@ -523,6 +529,7 @@ class TSPMap(metaclass=GetItem):
             rank = i + 1 # so our rank is from [1, population_size]
             ranked_population[rank] = path
         return ranked_population
+    # end rank_population()
 
     def select_subpopulation(self, ranked_population: dict[int, PathDistance], sub_size):
         '''
@@ -537,6 +544,7 @@ class TSPMap(metaclass=GetItem):
             ranked_subpopulation[rank] = ranked_population[rank]
 
         return ranked_subpopulation
+    # end select_subpopulation()
 
     def chunk_and_sweep(self, first_parent: PathDistance, second_parent: PathDistance, split_num: float):
         '''
@@ -582,6 +590,8 @@ class TSPMap(metaclass=GetItem):
         offspring = list(self.build_path(o) for o in offspring_lists)
 
         return offspring
+    # end chunk_and_sweep()
+
 
     def simple_mutate(self, path: PathDistance, mutation_probability = 1):
         '''
@@ -594,6 +604,7 @@ class TSPMap(metaclass=GetItem):
 
         # Get a list of the path, so that we can mutate it.
         protopath = path.current_path.split('-')
+        
         # Generate a random number between lower (0) and upper (path.length - 1)
         # Do this twice, one for each position that we will swap
         first_position = random.randint(0, path.length - 1)
@@ -606,21 +617,22 @@ class TSPMap(metaclass=GetItem):
         return self.build_path(protopath)
 
     def reproduce(self,
-                  parent_rank_df,
-                  rank_min,
-                  rank_max,
-                  ranked_subpopulation: dict[int, PathDistance],
-                  population_size, 
-                  parent_subpop_size,
-                  lambda_param,
-                  crossover_method, 
-                  crossover_split_point, 
-                  mutation_prob
+                  parent_rank_df: pd.DataFrame,  # data frame for saving the distribution of parent reproductive events
+                  rank_min: int,                 # the best rank number
+                  rank_max: int,                 # the worst rank number
+                  ranked_subpopulation: dict[int, PathDistance],    # our ranked subpop, i.e., our parents
+                  population_size: int,                             # Number we reproduce up to
+                  parent_subpop_size: int,                          # Number of parents
+                  lambda_param: float,          # Poisson distribution parameter for reproductive events
+                  crossover_method: str,        # Method for creating new offspring
+                  split_lower: float,           # lower parameter bound for crossover_method splitting
+                  split_upper: float,           # upper parameter bound for crossover_method splitting
+                  mutation_prob: float          # Mutation rate
                   ):
 
-        print("our ranked subpopulation")
-        for key, value in ranked_subpopulation.items():
-            print(f"rank {key} and  {value}")
+        #print("our ranked subpopulation") # for testing
+        #for key, value in ranked_subpopulation.items(): # for testing
+            #print(f"rank {key} and  {value}") # for testing
 
         ##############################
         # Poisson Distribution for Parental Reproduction
@@ -632,30 +644,87 @@ class TSPMap(metaclass=GetItem):
         offspring_counts = np.random.poisson(lambda_param, offspring_size)
     
         # Clamp the Poisson values to the rank range [rank_min, rank_max]
+        # Basically, if we get a random value below rank_min, we force it to be value rank_min;
+        # ... and if we get a value > rank_max, we force it -- clip it -- to the same value as rank_max
         offspring_counts_clamped = np.clip(offspring_counts, rank_min, rank_max)
     
-        # Count the distribution of clamped offspring counts
+        # Count the distribution of clamped offspring counts; return unique values--which are our ranks (x-axis in the histogram)
+        # ... also return the counts, i.e., how many times a rank appeared. This will be the y-axis.
+        # This count is also the number of times that given rank gets to reproduce. So, it's like drawing raffle tickets to reproduce!
         parent_rank, parent_offspring_number  = np.unique(offspring_counts_clamped, return_counts=True)
     
-        # Zip the two arrays into a dictionary
+        # Zip the two arrays into a dictionary, for easy iteration below
         rank_offspring_dict = dict(zip(parent_rank, parent_offspring_number))
     
         # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
+        # This represents the distribution of reproductive events by rank for a single generation
         df_single_generation = pd.DataFrame([rank_offspring_dict])
     
+        # Update the DataFrame for our reproductive events, since we want to get an average and total distribution at the end to plot
         new_parent_rank_df = pd.concat([parent_rank_df, df_single_generation], ignore_index=True)
-        print("Distribution of reproductive events to respective ranks")
-        print(rank_offspring_dict) # we use this to portion out the reproductive events
+        
+        print("Distribution of reproductive events to respective ranks") # for testing
+        print(rank_offspring_dict) # we use this to portion out the reproductive events, for testing
 
+        # Initialize list for storing our new population; note that this includes parents
+        new_population = [] 
+        
+        # Note that num_reproductive_events (the inner for-loop) will total to the number of offspring for this generation
+        # Thus, our new population size will be |set of parents| + |set of new offspring| = population_size
 
-        if crossover_method == 'chunk_and_sweep':
-            print(f"Crossover split point: {crossover_split_point}")
-            
-            print(f"mutation probability: {mutation_prob}")
+        # Begin allotting the reproductive events to their respective ranks
+        for rank, num_reproductive_events in rank_offspring_dict.items():
+            print('\n\n')
+            print(f"Parent Rank {rank} gets to mate {num_reproductive_events} times!")
 
+            for _ in range(num_reproductive_events):
+                
+                # Generate random number to pick a random mate; keep doing so until we get a non-self number
+                mate_rank = random.randint(rank_min, rank_max)
+                while mate_rank == rank:
+                    mate_rank = random.randint(rank_min, rank_max)
+                print(f"Mate rank = {mate_rank}") # for testing
+                
+                # call our crossover method with random split point within interval [split_lower, split_upper]
+                random_split_point = random.uniform(split_lower, split_upper)
+                print(f"split point = {random_split_point}") # for testing
+           
 
-        # We'll eventually want to return a new population and the new DataFrame results
-        return new_parent_rank_df
+                # Select appropriate method given by keyword argument
+                if crossover_method == 'chunk_and_sweep':
+                    offspring = self.chunk_and_sweep(ranked_subpopulation[rank],        # get the main parent
+                                                     ranked_subpopulation[mate_rank],   # get the randomly chosen mate
+                                                     random_split_point                 # pass our random split point
+                                                    )         
+                elif crossover_method == 'sweep_and_chunk':
+                    print("Sweep and chunk!") # for testing
+                elif crossover_method == 'alternating_sweep':
+                    print("Alternating sweep!") # for testing
+                else:
+                    # if we get non-sense keyword, just default to chunk_and_sweep
+                    offspring = self.chunk_and_sweep(ranked_subpopulation[rank],        # get the main parent
+                                                     ranked_subpopulation[mate_rank],   # get the randomly chosen mate
+                                                     random_split_point                 # pass our random split point
+                                                    )       
+                # We now have our offspring. Pass them through mutation function
+                # mutate our offspring (remember--not 100% guaranteed to mutate unless probability = 1)
+
+                print(f"mutation probability: {mutation_prob}") # for testing
+
+                # Do a simple list comprehension to get our list of mutated offspring!
+                mutated_offspring = [self.simple_mutate(o, mutation_prob) for o in offspring]
+
+                print(f"main parent: {ranked_subpopulation[rank]}")         # for testing
+                print(f"best offspring: {sorted(mutated_offspring)[0]}")    # for testing
+                # Here, we simply select the best of the four offspring... sort in ascending order and get index 0
+                # Add offspring to new population
+                new_population.append(sorted(mutated_offspring)[0])
+        
+        # Add the parent to the new population, too.
+            new_population.append(ranked_subpopulation[rank])
+        
+        # Return the new population (list of PathDistance objects) and the df for this generation's reproductive event distributions    
+        return new_population, new_parent_rank_df
      # end reproduce()
             
 
@@ -668,11 +737,16 @@ class TSPMap(metaclass=GetItem):
                           subpop_proportion = 0.1,          # the portion of population chosen to repopulate the next generation
                           lambda_param = 1,                 # Poisson distribution param of reproduction opportunities within parental subpop
                           crossover_method = 'chunk_and_sweep', # define the crossover method
-                          crossover_split_point = 0.5,          # define the 'split point' for crossovers. 
-                          mutation_prob = 0.1                   # mutation probability. Random floats between [0, 1] below this -> mutate
+                          split_lower = 0.1,
+                          split_upper = 0.9,                     # define the 'split point' for crossovers. 
+                          mutation_prob = 0.1,                   # mutation probability. Random floats between [0, 1] below this -> mutate
+                          save_data = True
                           ):
         
-    
+        '''
+        Genetic algorithm that initializes with a random population of size population_size.
+        Returns the best and worst PathDistance objects, which can be plotted.
+        '''
 
         #######################
         # other parameters
@@ -684,44 +758,159 @@ class TSPMap(metaclass=GetItem):
 
 
         ##################################
-        # Initialize results storage here
+        # Initialize DataFrame objects here
         ##################################
 
         #######################
         # parent-rank offspring-number DataFrame
         ########################
         # column names
-        all_possible_columns = np.arange(1, parent_subpop_size + 1)
+        all_possible_parent_ranks = np.arange(1, parent_subpop_size + 1)
+        
         # empty DataFrame initialized with column names
-        parent_rank_offspring_number_df = pd.DataFrame(columns=all_possible_columns)
+        parent_rank_offspring_number_df = pd.DataFrame(columns=all_possible_parent_ranks)
+
+        #######################
+        # GA run DataFrame initialized here (all solution distances from each generation)
+        #######################
+        # This DataFrame will store the results of every generation and thus the entire run.
+        # These results will be saved as a .csv with which we can create pretty figures
+        
+        all_possible_ranks = np.arange(1, population_size + 1)
+        
+        ga_run_df = pd.DataFrame(columns=all_possible_ranks)
+        
+
+
+        #######################
+        # Best and worst path
+        ######################
+
+        best_path = PathDistance(path_str = '', distance = float('inf'))    # inf distance is the worst, so we initialize best to this
+        worst_path = PathDistance(path_str = '', distance = float('-inf'))  # -inf is the best, so we initialize the worst to this
 
         ############################################
-        # Generate the first population here!
+        # Initialize the first random population here!
         ############################################
-
+        # Generate the first population randomly
         new_population = self.generate_random_paths(population_size)
 
+        # Rank the population, after which we record data
         ranked_population = self.rank_population(new_population)
         
+        ####################
+        # generational data recorded here
+        ####################
+        
+        # Dictionary comprehension to convert rank: PathDistance to rank: PathDistance.current_distance
+        ranked_distances = {rank: path.current_distance for rank, path in ranked_population.items()}
+        
+        # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
+        this_generation = pd.DataFrame([ranked_distances])
+        
+        # append it to our ga_run_df
+        ga_run_df = pd.concat([ga_run_df, this_generation], ignore_index=True)
+
+        # key 'min_rank' will have the best of this generation... compare with the global best path
+        if ranked_population[rank_min] < best_path:
+            best_path = ranked_population[rank_min]
+
+        # index -1 (the last element) is the worst of this generation; compare with global worst
+        if ranked_population[rank_max] > worst_path:
+            worst_path = ranked_population[rank_max]
+
+
+        # Select the parents; the rest of the population is culled in this step
         parent_subpopulation = self.select_subpopulation(ranked_population, parent_subpop_size)
 
+        # Now we simulate the reproductive cycle through G generations.
         for _ in range(generations):
-            parent_rank_offspring_number_df = self.reproduce(parent_rank_offspring_number_df,
-                                                        rank_min,
-                                                        rank_max,
-                                                        parent_subpopulation ,
-                                                        population_size,
-                                                        parent_subpop_size,
-                                                        lambda_param,
-                                                        crossover_method,
-                                                        crossover_split_point,
-                                                        mutation_prob
-                                                        )
- 
-        parent_rank_offspring_number_df.to_csv('test_parent_rank.csv')
+            print(f"Generation {_}") # for testing
 
-          
+            # Get the new population produced by our parents, and get the distribution data for reproductive events
+            new_population, parent_rank_offspring_number_df = self.reproduce(
+                                                        parent_rank_offspring_number_df,    # parent reproduction data
+                                                        rank_min,           # best rank
+                                                        rank_max,           # worst rank
+                                                        parent_subpopulation,   # our ranked subpopulation of parents
+                                                        population_size,        # maximum population size up to which we reproduce
+                                                        parent_subpop_size,     # size of our parent subpopulation
+                                                        lambda_param,           # pass lambda param for parent reproduction
+                                                        crossover_method,       # define crossover_method
+                                                        split_upper,            # split range interval lower bound
+                                                        split_lower,            # split range interval upper bound
+                                                        mutation_prob           # mutation rate
+                                                        )
+                                                 
+                                                    
+
+             
+            # rank the new population
+            ranked_population = self.rank_population(new_population)
+                
+            ####################
+            #Record  generational data after ranking population!
+            ####################i
+    
+            # Dictionary comprehension to convert rank: PathDistance to rank: PathDistance.current_distance
+            ranked_distances = {rank: path.current_distance for rank, path in ranked_population.items()}
+        
+            # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
+            this_generation = pd.DataFrame([ranked_distances])
+
+            # append it to our ga_run_df
+            ga_run_df = pd.concat([ga_run_df, this_generation], ignore_index=True)
+
+            # rank_min is the key for this generation's best!
+            if ranked_population[rank_min] < best_path:
+                 best_path = ranked_population[rank_min]
+
+            # rank_max is the key for this generation's worst!
+            if ranked_population[rank_max] > worst_path:
+                 worst_path = ranked_population[rank_max]
+
+            parent_subpopulation = self.select_subpopulation(ranked_population, parent_subpop_size)
+
+        # Final formatting for the DataFrames to be written to .csv 
+        # Modify the column names by placing 'r' in the front, to denote rankings
+        if save_data:
+
+            print("Writing data to .csv files...")
+            
+            # Process the reproductive event distribution data
+            parent_rank_offspring_number_df.columns  = ['r' + str(col) for col in parent_rank_offspring_number_df.columns]
+            parent_rank_offspring_number_df.index.name = 'generation'
+            parent_rank_offspring_number_df.to_csv('parent_rank_offspring_number_df.csv')
+            
+
+            ########################
+            # process the GA run data
+            ########################
+            # Select only the numerical columns (excluding the first column, or index, to be named 'generation')
+            numerical_cols = ga_run_df.iloc[:, 1:]
+
+            # Calculate min, max, average, and SEM for each row ignoring the 'generation' column
+            ga_run_df['min'] = numerical_cols.min(axis=1)
+            ga_run_df['max'] = numerical_cols.max(axis=1)
+            ga_run_df['average'] = numerical_cols.mean(axis=1)
+            ga_run_df['SEM'] = numerical_cols.std(axis=1) / np.sqrt(numerical_cols.shape[1])
+
+            ga_run_df.columns = ['rank_' + str(col) for col in ga_run_df.columns]
+            ga_run_df.index.name = 'generation'
+            ga_run_df.to_csv('ga_run_df.csv')
+            print("Data saved.")
+
+        print("Genetic algorithm run complete. The best and worst of this run are: ")
+        print(f"Best: {best_path}")
+        print(f"Worst: {worst_path}")
+    
+        return best_path, worst_path
     ######################
+    # END OF GENETIC ALGORITHM
+    #####################
+
+    ######################
+    # Other
     # Algorithms for TSP #
     ######################
 
@@ -1160,7 +1349,10 @@ class TSPMap(metaclass=GetItem):
    
         return copy.deepcopy(new_tour) # return the new tour, which is a PathDistance object  
     # end of _edge_insert() method
-
+    
+    ################################
+    # BASIC PLOTTING FOR TSPMAP
+    ################################
 
     # object method to plot a particular path over the problem map
     def plot_path(self, path: PathDistance, plot_title: str, save=False): 
@@ -1266,7 +1458,7 @@ class TSPMap(metaclass=GetItem):
     # END brute_force_all()
 
 # ================================================ #
-#               Inherited Classe                 
+#               Inherited Class                 
 # ================================================ #
 
 # Whereas the TSPMap did not define edges, and thus simulated a complete undirected graph,
@@ -1308,7 +1500,7 @@ class TSPMapWithEdges(TSPMap):
     def _expand(self, current_path: PathDistance, edges: dict[str, list[PathDistance]]):
         '''
         Private function utilized by various graph search algorithms.
-
+        This essentially 'expands' the frontier of next possible moves. It yields possible PathDistance objects
         Parameters:
         current_path = PathDistance object whose current_vertex is being expanded to generate possible next paths
         edges = dictionary with vertex labels as keys and lists of PathDistance objects whose current_vertex is a possible next vertex
@@ -1545,7 +1737,9 @@ def plot_results(all_paths_dict: dict[str, list[PathDistance]],
                     )
 # end plot_results()
 
-
+#############################################
+# Private functions called by the basic plotting functions
+#############################################
 def _plot_tuples(tuples_list, write=False):
     ''' 
     Generates plots given a list of tuples.
