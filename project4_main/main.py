@@ -136,7 +136,7 @@ def run_genetic_algorithm():
         plt.show()
 
         problem.plot_path(worst, 'Example of Worst: Distance = ' + str(worst.current_distance) + '\nN = ' + str(problem.dimension), save=False)
-        plt.savefig(f'{run_directory}/worst_{str(best.current_distance)}.png')
+        plt.savefig(f'{run_directory}/worst_{str(worst.current_distance)}.png')
         plt.show()
 
     ##################################################################
