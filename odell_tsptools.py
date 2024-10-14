@@ -11,7 +11,7 @@ import queue # for implementing FIFO and priority queue for various search algor
 import numpy as np # used for random number array generations, especially for the genetic algorithms
 import random # for random SINGLE number generations, especially for getting a quick probability check
 import pandas as pd # to create DataFrame objects for genetic algorithm, allowing for later plotting and what-not
-
+import warnings
 
 # Python 3.12.4
 # Matplotlib version 3.8.4
@@ -659,12 +659,19 @@ class TSPMap(metaclass=GetItem):
         # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
         # This represents the distribution of reproductive events by rank for a single generation
         df_single_generation = pd.DataFrame([rank_offspring_dict])
-    
-        # Update the DataFrame for our reproductive events, since we want to get an average and total distribution at the end to plot
-        new_parent_rank_df = pd.concat([parent_rank_df, df_single_generation], ignore_index=True)
         
-        print("Distribution of reproductive events to respective ranks") # for testing
-        print(rank_offspring_dict) # we use this to portion out the reproductive events, for testing
+        # Replace NaN values with 0
+        df_single_generation.fillna(0, inplace=True)
+
+
+        # FUTUREWARNING for the following line of code. I'm going to ignore the warning for now.
+        # Update the DataFrame for our reproductive events, since we want to get an average and total distribution at the end to plot
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            new_parent_rank_df = pd.concat([parent_rank_df, df_single_generation], ignore_index=True)
+        
+        #print("Distribution of reproductive events to respective ranks") # for testing
+        #print(rank_offspring_dict) # we use this to portion out the reproductive events, for testing
 
         # Initialize list for storing our new population; note that this includes parents
         new_population = [] 
@@ -674,8 +681,8 @@ class TSPMap(metaclass=GetItem):
 
         # Begin allotting the reproductive events to their respective ranks
         for rank, num_reproductive_events in rank_offspring_dict.items():
-            print('\n\n')
-            print(f"Parent Rank {rank} gets to mate {num_reproductive_events} times!")
+            #print('\n\n') # for testing
+            #print(f"Parent Rank {rank} gets to mate {num_reproductive_events} times!") # for testing
 
             for _ in range(num_reproductive_events):
                 
@@ -683,11 +690,11 @@ class TSPMap(metaclass=GetItem):
                 mate_rank = random.randint(rank_min, rank_max)
                 while mate_rank == rank:
                     mate_rank = random.randint(rank_min, rank_max)
-                print(f"Mate rank = {mate_rank}") # for testing
+                #print(f"Mate rank = {mate_rank}") # for testing
                 
                 # call our crossover method with random split point within interval [split_lower, split_upper]
                 random_split_point = random.uniform(split_lower, split_upper)
-                print(f"split point = {random_split_point}") # for testing
+                #print(f"split point = {random_split_point}") # for testing
            
 
                 # Select appropriate method given by keyword argument
@@ -709,13 +716,13 @@ class TSPMap(metaclass=GetItem):
                 # We now have our offspring. Pass them through mutation function
                 # mutate our offspring (remember--not 100% guaranteed to mutate unless probability = 1)
 
-                print(f"mutation probability: {mutation_prob}") # for testing
+                #print(f"mutation probability: {mutation_prob}") # for testing
 
                 # Do a simple list comprehension to get our list of mutated offspring!
                 mutated_offspring = [self.simple_mutate(o, mutation_prob) for o in offspring]
 
-                print(f"main parent: {ranked_subpopulation[rank]}")         # for testing
-                print(f"best offspring: {sorted(mutated_offspring)[0]}")    # for testing
+                #print(f"main parent: {ranked_subpopulation[rank]}")         # for testing
+                #print(f"best offspring: {sorted(mutated_offspring)[0]}")    # for testing
                 # Here, we simply select the best of the four offspring... sort in ascending order and get index 0
                 # Add offspring to new population
                 new_population.append(sorted(mutated_offspring)[0])
@@ -741,6 +748,7 @@ class TSPMap(metaclass=GetItem):
                           split_upper = 0.9,                     # define the 'split point' for crossovers. 
                           mutation_prob = 0.1,                   # mutation probability. Random floats between [0, 1] below this -> mutate
                           abominate_threshold = float('inf'),
+                          abomination_percentage = 0.1,
                           save_data = True,
                           file_path = '.',
                           run_number = 0
@@ -756,9 +764,12 @@ class TSPMap(metaclass=GetItem):
         #######################
         parent_subpop_size = int(np.ceil(population_size * subpop_proportion))
 
+
+
         rank_min = 1            # the 'best' parental rank, i.e., #1 is best!
         rank_max = parent_subpop_size  # the 'worst' parental rank
 
+        abomination_proportion = int(np.ceil(parent_subpop_size * abomination_percentage))
 
         ##################################
         # Initialize DataFrame objects here
@@ -812,8 +823,12 @@ class TSPMap(metaclass=GetItem):
         # Convert the dictionary to a DataFrame and concatenate it to the main DataFrame
         this_generation = pd.DataFrame([ranked_distances])
         
-        # append it to our ga_run_df
-        ga_run_df = pd.concat([ga_run_df, this_generation], ignore_index=True)
+
+        # IGNORE FUTURE WARNING HERE; issue seems to come from the conversion of a dict to a pandas df
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore", FutureWarning)
+            # append it to our ga_run_df
+            ga_run_df = pd.concat([ga_run_df, this_generation], ignore_index=True)
 
         # key 'min_rank' will have the best of this generation... compare with the global best path
         if ranked_population[rank_min] < best_path:
@@ -829,7 +844,7 @@ class TSPMap(metaclass=GetItem):
 
         # Now we simulate the reproductive cycle through G generations.
         for _ in range(generations):
-            print(f"Generation {_}") # for testing
+            print(f"Generation {_} of {generations} for run {run_number}") # for testing
 
             # Get the new population produced by our parents, and get the distribution data for reproductive events
             new_population, parent_rank_offspring_number_df = self.reproduce(
@@ -868,8 +883,12 @@ class TSPMap(metaclass=GetItem):
             # rank_min is the key for this generation's best!
             if ranked_population[rank_min] < best_path:
                 best_path = ranked_population[rank_min]
-            elif ranked_population[rank_min] == best_path:
+
+            else:
+                #print(f"Best path did not improve in generation {_}") # for testing
+                # If we didn't improve, increment the abominate count
                 abominate_count += 1
+
             # rank_max is the key for this generation's worst!
             if ranked_population[rank_max] > worst_path:
                 worst_path = ranked_population[rank_max]
@@ -877,11 +896,20 @@ class TSPMap(metaclass=GetItem):
 
             parent_subpopulation = self.select_subpopulation(ranked_population, parent_subpop_size)
 
-            
+            #print(abominate_count) # for testing
             if abominate_count > abominate_threshold:
-                # Assign random path to the worst parent
-                parent_subpopulation[rank_max] = self.generate_random_paths(1)[0]
+                # reset the count
+                abominate_count = 0
+                abominations = self.generate_random_paths(abomination_proportion)
 
+                # Assign random path to the worst parents, working towards the best
+                for abomination_index in range(abomination_proportion):
+
+                    #print(f"Abomination {abomination_index}! Replacing {rank_max - abomination_index}") # for testing
+
+                    parent_subpopulation[rank_max - abomination_index] = abominations[abomination_index]
+
+                    
         # Final formatting for the DataFrames to be written to .csv 
         # Modify the column names by placing 'r' in the front, to denote rankings
         if save_data:
@@ -911,9 +939,9 @@ class TSPMap(metaclass=GetItem):
             ga_run_df.to_csv(f'{file_path}/ga/run_{run_number}_ga_run_df.csv')
             print("Data saved.")
 
-        print("Genetic algorithm run complete. The best and worst of this run are: ")
-        print(f"Best: {best_path}")
-        print(f"Worst: {worst_path}")
+        #print("Genetic algorithm run complete. The best and worst of this run are: ") # for testing
+        #print(f"Best: {best_path}") # for testing
+        #print(f"Worst: {worst_path}") # for testing
     
         return best_path, worst_path
     ######################
