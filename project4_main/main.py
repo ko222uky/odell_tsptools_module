@@ -330,6 +330,40 @@ def run_genetic_algorithm():
 
 # End run_genetic_algorithm()
 
+def plot_final():
+
+    # filename
+    run_directory = run_directory_entry.get()
+    df = pd.read_csv(f'{run_directory}/csv/final/ga_final_df.csv')
+
+    # define our data
+    x = df['generation']  # X-axis (row identifiers are the generation index)
+    y = df['rank_average']  # Average
+    y_min = df['rank_min']
+    y_max = df['rank_max']
+
+    sem = df['rank_SEM']              # Standard Error of the Mean for the average
+    min_rank_sem = df['rank_min_SEM'] # SEM for the min rank of our aggregated run data
+    max_rank_sem = df['rank_max_SEM'] # SEM for the max rank
+
+    plt.plot(x, y_min, label='Min', color='blue', linestyle='--')
+    plt.plot(x, y_max, label='Max', color='red', linestyle='--')
+    plt.plot(x, y, label='Average', color='green')
+
+    # Plot the SEM as shaded region
+    plt.fill_between(x, y - sem, y + sem, color='green', alpha=0.2, label='±SEM')
+    plt.fill_between(x, y_max - max_rank_sem, y_max + max_rank_sem, color='red', alpha=0.2, label='± max SEM')
+    plt.fill_between(x, y_min - min_rank_sem, y_min + min_rank_sem, color='blue', alpha=0.2, label='± min SEM')
+
+    
+    # Add labels and legend
+    plt.xlabel('Generation #')
+    plt.ylabel('Distance')
+    plt.title('Population Fitness with Increasing Generations')
+    plt.legend()
+    plt.show()
+
+
 def main():
     # Create the main window
     root = tk.Tk()
@@ -418,6 +452,19 @@ def main():
     # Main execute button for running the genetic algorithm
     execute_button = tk.Button(root, text="Run Genetic Algorithm", command=run_genetic_algorithm)
     execute_button.grid(row=14, column=0, columnspan=2)
+
+
+    tk.Label(root, text="Run Directory").grid(row=15, column=0)
+    global run_directory_entry
+    run_directory_entry = tk.Entry(root)
+    run_directory_entry.grid(row=15, column=1)
+    run_directory_entry.insert(0, "my_run")  # Default value
+
+    # Main execute button for running the genetic algorithm
+    execute_button = tk.Button(root, text="Re-plot Final Graph", command=plot_final)
+    execute_button.grid(row=16, column=0, columnspan=2)
+
+
 
     # Run the Tkinter event loop
     root.mainloop()
