@@ -2844,21 +2844,7 @@ def woc_start_threads():
     run_directory = f'results_woc/{run_title}_{filename.rstrip(".tsp")}'    # unique directory for a given run, specified by run_title and filename
     os.makedirs(run_directory, exist_ok=True)
 
-    #############################################
-    # CROWD RESULTS STORED HERE 
-    #############################################
-    crowd_df_data = []
-    crowd_path_list = []
-    crowd_edge_counts = {}
-    #############################################
 
-    # list of threads, i.e., the individual members of our crowd
-    workers = []
-
-    #################################
-    # Get all the parameters here...
-    # These are from the same field
-    #################################
 
     # number of threads, i.e., crowd members
     crowd_size = int(crowd_size_entry.get())
@@ -2889,7 +2875,21 @@ def woc_start_threads():
 
 
     for run_number in range(num_runs):
+        #############################################
+        # CROWD RESULTS PER RUN STORED HERE 
+        #############################################
+        crowd_df_data = []
+        crowd_path_list = []
+        crowd_edge_counts = {}
+        #############################################
 
+        # list of threads, i.e., the individual members of our crowd
+        workers = []
+
+        #################################
+        # Get all the parameters here...
+        # These are from the same field
+        #################################
         print(f"WoC run number {run_number} of {num_runs} WoC runs...")
 
         # start the threads! Each thread is a member in our crowd!
@@ -2970,14 +2970,18 @@ def woc_start_threads():
 
 
         # GA best and WoC best per run, to get AVERAGE data on solutions
-        # Sort the DataFrame by the 'local_best_path' column
-        df_sorted = df.sort_values(by='local_best_path')
+        # Sort the DataFrame by the 'distance' column
+        df_sorted = df.sort_values(by='distance')
 
         # Pull the row with the lowest value of 'local_best_path'
         lowest_local_best_path_row = df_sorted.iloc[0]
-
+        print(f"ADDING ROW: {lowest_local_best_path_row}")
         # Convert the row to a DataFrame and add the run_number column
         lowest_local_best_path_df = pd.DataFrame([lowest_local_best_path_row])
+
+
+
+
         lowest_local_best_path_df['run_number'] = run_number
 
         ######################
