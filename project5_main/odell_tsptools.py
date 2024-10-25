@@ -537,7 +537,11 @@ class TSPMap(metaclass=GetItem):
         if isinstance(path, str):
             path = self.build_path(path)
 
+
         # new path
+        if path[0] == path[-1]:
+            return path
+
         tour = path + self.__nodes[path[0]]
 
         return tour
@@ -910,6 +914,7 @@ class TSPMap(metaclass=GetItem):
 
             # convert the ranked tours back to a dict of paths
             ranked_population = {rank: self.trim_path(path, 1) for rank, path in ranked_tours.items()}
+
         else:
             # Rank the population, after which we record data
             ranked_population = self.rank_population(new_population)
@@ -1062,16 +1067,7 @@ class TSPMap(metaclass=GetItem):
         #print("Genetic algorithm run complete. The best and worst of this run are: ") # for testing
         #print(f"Best: {best_path}") # for testing
         #print(f"Worst: {worst_path}") # for testing
-        if tours == 'true':
-            # make our population into tours
-            new_tours = [self.loop_path(path) for path in new_population]
-            print("Last population converted to tours") # for testing
-            # rank population as they are tours...
-            ranked_population = self.rank_population(new_tours)
-            
-            # convert best and worst to tours
-            best_path = self.loop_path(best_path)
-            worst_path = self.loop_path(worst_path)
+
 
         return best_path, worst_path, ranked_population, edge_counts
     
@@ -1177,7 +1173,7 @@ class TSPMap(metaclass=GetItem):
 
             # For a given unused vertex, find all of its edge partners!
             for edge, count in sorted_edges:
-                print(f"Checking edge {edge}...")
+                print(f"Checking edge {edge} for our unused vertex's partner (neighbor)...")
                 v1, v2 = edge
 
                 if v1 == int(unused_vertex):
@@ -1215,7 +1211,7 @@ class TSPMap(metaclass=GetItem):
 
             # Now we find if one of the possible edges is in our path! Just print "Found it!" for now, for testing
             for edge, count in sorted_edges_with_counts:
-                print(f"Checking edge {edge} with count {count}...")
+                #print(f"Checking edge {edge} with count {count}...")
                 if edge in path_edges:
                     print(f"Edge insertion for unused vertex {unused_vertex} found! Edge: {edge}")
                     matched_vertex1, matched_vertex2 = edge
@@ -2807,7 +2803,6 @@ def _run_crowd_member(
     
     elapsed_t = time.perf_counter() - run_start
 
-    
     # We record the best path's data and the run time for this individual thread!
     local_df_data.append((crowd_member_id,                  # thread id
                         local_best_path.current_path,     # best PathDistance object's path string
