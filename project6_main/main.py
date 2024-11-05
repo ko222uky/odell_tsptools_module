@@ -1,7 +1,4 @@
 from odell_tools import odell_hitting_strings as ohs
-import matplotlib.pyplot as plt
-import warnings
-import copy
 
 # ================================================ #
 #               MAIN FUNCTION
@@ -9,6 +6,7 @@ import copy
 
 def main():
     
+    # Just call the GUI
     ohs.ga_gui()
 
 # end main

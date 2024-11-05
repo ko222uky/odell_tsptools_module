@@ -1215,9 +1215,9 @@ def ga_gui():
             print(f"Generation {i}")
 
             parents = copy.deepcopy(csp.select_parents())             # Parents selected after evaluation of fitness 
-
+            print(f"Parents selected. Reproducing...")
             csp.reproduce(parents, i)                                 # Parents reproduce up to population size. Handles mutation, too. Mutation targets bottom 10% match-sum locations, via point mutations.
-
+            print(f"Reproduction complete. Evaluating fitness...")
             csp.evaluate_population_fitness(i)                        # After reproduction and mutation of offspring, evaluate fitness.
 
             # Find the best solution, if there is one, in this generation. Update overall best_by_average if necessary.
