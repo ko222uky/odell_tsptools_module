@@ -1,0 +1,37 @@
+
+    # Old code that I clipped out and removed from the odell_hitting_strings.py
+
+
+            
+    def generate_heatmap(self, csp_instance_strings):
+        heatmap = []
+
+        for string in csp_instance_strings:
+            # For each string, we use a list comprehension to generate a list of 1's and 0's,...
+            #, ... and then we append this list to our matrix.
+            heatmap.append(
+                [1 if self._string[i] == string[i] else 0 
+                for i in range(len(self._string))
+                ]
+                )
+
+
+
+    def heatmap_to_dataframe(self):
+        if not self._heatmap:
+            raise ValueError("Heatmap has not been generated yet.")
+
+        # Create a list of dictionaries to hold the data for the DataFrame
+        data = []
+        for i, row in enumerate(self._heatmap):
+            row_data = {'index': i, 'generation': self._generation}
+            row_data.update({f'pos_{j}': value for j, value in enumerate(row)})
+            data.append(row_data)
+
+        # Create the DataFrame
+        df = pd.DataFrame(data)
+        return df
+
+
+
+
