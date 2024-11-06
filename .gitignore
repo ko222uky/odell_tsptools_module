@@ -4,3 +4,6 @@ project6_main/results
 **/__pycache__
 **/OLD_TESTS
 **/*.png
+**/.Rhistory
+**/woc_results
+**/results_summary.csv

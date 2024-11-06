@@ -15,6 +15,7 @@ import random # for random SINGLE number generations, especially for getting a q
 import pandas as pd # to create DataFrame objects for genetic algorithm, allowing for later plotting and what-not
 import warnings
 from collections import Counter # for counting unique Hamming distances in the SolutionString class
+from collections import defaultdict
 import networkx as nx # for visualizing the solutions during wisdom of the crowds
 
 
@@ -113,8 +114,14 @@ class ClosestStringProblem():
 
     def __del__(self):
         # Delete the SolutionString objects in the population.
-        del self._solution_population
-        del self._strings
+        if hasattr(self, '_solution_population'):
+            for solution in self._solution_population:
+                del solution
+
+        if hasattr(self, '_strings'):
+            for string in self._strings:
+                del string
+
         gc.collect()
 
 
@@ -288,9 +295,6 @@ class ClosestStringProblem():
         offspring = []
         for offspring_string in [offspring_string1, offspring_string2, offspring_string3, offspring_string4, offspring_string5, offspring_string6, offspring_string7, offspring_string8]:
             offspring.append(SolutionString(string = offspring_string, length = parent1.length, alphabet = parent1.alphabet))
-
-        # Sort offspring by fitness
-        offspring = sorted(offspring)
 
         # Return two random offspring
         offspring1, offspring2 = random.sample(offspring, 2)
@@ -625,6 +629,9 @@ class SolutionString:
         This should be done for each SolutionString at every generation.
         NOTE: I evaluate fitness using the lambda parameter. Hence, comparators will be based on the lambda value.
         '''
+        # Update the length in case we instantiated the SolutionString with an empty string.
+        self._length = len(self._string)
+
         self._generation = generation
         target_strings = problem.strings
 
@@ -806,7 +813,12 @@ class SolutionString:
             df.to_csv(filename, mode='a', header=not file_exists, index=False)
         del df
 
-    def append_fitness_data(self, generation, tag, experiment_name = 'vanilla_experiment', run_number = 0):
+    def append_fitness_data(self,
+                            generation, 
+                            tag, 
+                            experiment_name = 'vanilla_experiment',
+                            run_number = 0,
+                            woc = False):
         data = {
             'generation': [generation],
             'total_hamming_distance': [self._total_hamming_distance],
@@ -817,12 +829,19 @@ class SolutionString:
         }
 
         df = pd.DataFrame(data)
+        if woc:
+            filename = f"woc_results/{experiment_name}/individual_{run_number}/{tag}_fitness_data.csv"
 
-        filename = f"results/{experiment_name}/run_{run_number}/{tag}_fitness_data.csv"
+            # Make the experiment name directory, if it doesn't exist
+            if not os.path.exists(f'woc_results/{experiment_name}/individual_{run_number}'):
+                os.mkdir(f'woc_results/{experiment_name}/individual_{run_number}')
 
-        # Make the experiment name directory, if it doesn't exist
-        if not os.path.exists(f'results/{experiment_name}/run_{run_number}'):
-            os.mkdir(f'results/{experiment_name}/run_{run_number}')
+        else:
+            filename = f"results/{experiment_name}/run_{run_number}/{tag}_fitness_data.csv"
+
+            # Make the experiment name directory, if it doesn't exist
+            if not os.path.exists(f'results/{experiment_name}/run_{run_number}'):
+                os.mkdir(f'results/{experiment_name}/run_{run_number}')
  
 
         # Append the fitness data to the file, if it exists. Otherwise, create the file.
@@ -835,7 +854,7 @@ class SolutionString:
         del df
 
 
-    def append_run_data(self, tag = 'run_solutions', experiment_name = 'vanilla_experiment', run_number = 0, run_time = 0):
+    def append_run_data(self, tag = 'run_solutions', experiment_name = 'vanilla_experiment', run_number = 0, run_time = 0, woc = False):
         data = {
             'run_number': [run_number],
             'total_hamming_distance': [self._total_hamming_distance],
@@ -848,7 +867,12 @@ class SolutionString:
 
         df = pd.DataFrame(data)
 
-        filename = f"results/{experiment_name}/{tag}_fitness_data.csv"
+        if woc:
+            # The main thing that should change is the directory where the data is saved.
+            # The experiment_name will mention WoC run number
+            filename = f"woc_results/{experiment_name}/{tag}_fitness_data.csv"
+        else:
+            filename = f"results/{experiment_name}/{tag}_fitness_data.csv"
 
         # Append the fitness data to the file, if it exists. Otherwise, create the file.
         file_exists = os.path.exists(filename)
@@ -857,6 +881,8 @@ class SolutionString:
             df.to_csv(filename, mode='w', header=not file_exists, index=False)
         else:
             df.to_csv(filename, mode='a', header=not file_exists, index=False)
+
+
 
     #################
     # Helper methods for the update_string_data method.
@@ -1066,7 +1092,7 @@ def ga_gui():
         matchsum_threshold = float(matchsum_threshold_entry.get())
         parents = float(parents_entry.get())
 
-        print(f"num_runs: {num_runs}")
+        print(f"num_runs (or crowd members): {num_runs}")
         print(f"num_generations: {num_generations}")
         print(f"snapshot_interval: {snapshot_interval}")
         print(f"mutation_rate: {mutation_rate}")
@@ -1108,9 +1134,162 @@ def ga_gui():
                     gc.collect()
 
 
-    def execute_single():
+    def aggregate_all(woc = False):
+        '''
+        After running execute_all, this function will aggregate the solution strings from all runs.
+        The results are stored in the 'results' directory, in a CSV file named 'aggregated_solutions.csv'.
+        A single aggregate_all produces one aggregated solution per experiment (i.e. series of runs).
+        To get a statistical estimate of aggregate solution performance, multiple aggregate_all runs are needed.
+        In this case, each 'experiment' should be defined as a single 'wisdom of the crowds' run.
+        '''
+        #################################
+        # Aggregate Solution Strings
+        #################################
 
-        # Get all the same params as execute_all...
+        # These will store the strings aggregated from all experiments
+        # experiment_name should store the name of instance file (so append .csp)
+        experiment_name = []
+        single_best_strings = []
+        aggregated_solution_strings = []
+
+
+        # Aggregation requires additional runtime to compute. We calculate that here.
+        total_runtime_ga = []
+        additional_runtime = []
+        woc_runtime = []
+
+        # Get all the experiment directories in the results directory
+        # Generally, each experiment will be named after the .csp file instance
+        if woc:
+            results_dir = 'woc_results'
+        else:
+            results_dir = 'results'
+
+        for experiment_dir in os.listdir(results_dir):
+            
+            # If the file ends in .csv, then continue
+            if experiment_dir.endswith('.csv'):
+                print(f"Skipping {experiment_dir} since its not a directory.")
+                continue
+
+            if woc:
+                experiment_name.append(experiment_dir)
+            else:
+                experiment_name.append(experiment_dir)
+
+            experiment_path = os.path.join(results_dir, experiment_dir)
+
+            total_hamming_distances = []
+            string_weights = []
+            solution_strings = []
+            runtimes = []
+            
+            if os.path.isdir(experiment_path):
+                # Look in the experiment directory....
+
+                print(f"Aggregating solution strings from {experiment_dir}...")
+
+
+                run_solution_path = os.path.join(experiment_path, 'run_solutions_fitness_data.csv')
+
+
+                df = pd.read_csv(run_solution_path)
+
+
+                runtimes.extend(df['runtime'].tolist())
+                total_runtime_ga.append(sum(runtimes))
+
+
+                ############################################################################
+                # Let's consider this the starting point of computing the aggregate string
+                #############################################################################
+                # START TIMER
+                _ = time.perf_counter()
+
+
+                total_hamming_distances.extend(df['total_hamming_distance'].tolist())
+                max_d = max(total_hamming_distances)
+                min_d = min(total_hamming_distances)
+
+                # The string with the LOWEST total hamming distance will have a weight of 1.
+                # But if the range is 0, then we have a problem. So we need to check for that.
+                # If the range is 0, then all strings have the same total hamming distance and thus weight.
+                # Thus, we assign weight of 1.
+                string_weights = [(lambda x: 1 - (x - min_d) / (max_d - min_d))(x) if (max_d - min_d) != 0 else 1 for x in total_hamming_distances]
+                
+                solution_strings.extend(df['solution_string'].tolist())
+
+                # Find solution string with lowest total hamming distance
+                single_best_solution = solution_strings[total_hamming_distances.index(min(total_hamming_distances))]
+                single_best_strings.append(single_best_solution)
+
+                # To store the aggregated solution string
+                aggregated_solution = []
+
+                # Next, we need to consider each position of our aggregate string...
+                for position in range(len(solution_strings[0])):
+                    # For each position, we make a quick dictionary to count characters.
+                    # Use default dict so we have counts of 0 initialized.
+                    weighted_match_count = defaultdict(lambda: 0)
+                    
+                    # And for each position, we consider that same position among our solution strings...
+                    for weight, string in enumerate(solution_strings):
+                        # A given string 'votes' for the character at that position based on its character.
+                        # The vote is simply incrementing that character's count by the string's weight.
+                        print(f' String {weight} votes "{string[position]}" at pos {position} with weight {string_weights[weight]}.')
+                        weighted_match_count[string[position]] += string_weights[weight]
+
+                    # Once we have all the votes, we simply take the character with the highest count.
+                    # This is our aggregate character at that position.
+                    # Let's print the results, first, for debugging purposes.
+
+                    # We can use the Counter object to get the most common character.
+                    # This is a bit more robust than simply taking the max of the dictionary.
+                    position_counter = Counter(weighted_match_count)
+                    print(f'Position {position} has the following counts: {position_counter}')
+
+                    # We can use the most_common method to get the most common character.
+                    # .most_common(n) returns n most common, so most_common(1) is the number one most common.
+                    # most_common returns a list of tuples. We use [0] to access the first and only tuple.
+                    # Next, the tuple contains the character and its count, so we use [0] to access the character.
+                    winner = position_counter.most_common(1)[0][0]
+                    print(f'Letter "{winner}" wins position {position}.')
+                    # Finally, we append the winning character to our aggregate solution.
+                    aggregated_solution.append(winner)
+                aggregated_solution_strings.append(''.join(aggregated_solution))
+
+                # STOP TIMER
+                elapsed_time = time.perf_counter() - _
+
+                additional_runtime.append(elapsed_time)
+                woc_runtime.append(sum(runtimes) + elapsed_time)
+
+
+        print(f"Aggregated solution string: {''.join(aggregated_solution)}")
+        # End for-loop for aggregating solutions
+
+
+        # print the length of each array
+        print(f"Length of experiment_name: {len(experiment_name)}")
+        for name in experiment_name:
+            print(name)
+
+
+
+
+        # Now we have all the aggregated solution strings, we can write them to a file.
+        df = pd.DataFrame({'experiment_name': experiment_name,
+                        'aggregated_solution_string': aggregated_solution_strings,
+                        'single_best_string': single_best_strings,
+                        'total_runtime_ga': total_runtime_ga,
+                        'additional_runtime': additional_runtime,
+                        'woc_runtime': woc_runtime})
+    
+
+
+        df.to_csv(results_dir + '/aggregated_solutions.csv', index=False)
+
+    def woc():
         num_runs = int(num_runs_entry.get())
         num_generations = int(num_generations_entry.get())
         snapshot_interval = int(snapshot_interval_entry.get())
@@ -1118,42 +1297,67 @@ def ga_gui():
         matchsum_threshold = float(matchsum_threshold_entry.get())
         parents = float(parents_entry.get())
 
-        # ... but also get the filename from the user.
-        filename = filename_entry.get()
-        # graph x-axis limits
-        lower_x = int(lower_x_entry.get())
-        upper_x = int(upper_x_entry.get())
+        # Get the woc runs
+        woc_runs = int(woc_runs_entry.get())
 
-        print(f"num_runs: {num_runs}")
+        print(f"num_runs (or crowd members): {num_runs}")
         print(f"num_generations: {num_generations}")
         print(f"snapshot_interval: {snapshot_interval}")
         print(f"mutation_rate: {mutation_rate}")
         print(f"matchsum_threshold: {matchsum_threshold}")
-        print(f"parents %: {parents}")
-        print(f"filename: {filename}")
+        print(f"parents: {parents}")
 
         # make results directory
-        if not os.path.exists("results"):
-            os.mkdir("results")
+        if not os.path.exists("woc_results"):
+            os.mkdir("woc_results")
 
-        # For the given filename, run a single experiment series for the number of runs specified.
-        for run_number in range(num_runs):
 
-            _ = time.perf_counter()
-            best_solution = genetic_algorithm(filename, 
-                                num_generations, 
-                                snapshot_interval, 
-                                mutation_rate, 
-                                matchsum_threshold, 
-                                parents, 
-                                run_number,
-                                x_lower = lower_x,
-                                x_upper = upper_x
-                                )
-            runtime = time.perf_counter() - _
+        # iterate through all .csp instances in the woc data directory
+        # Run experiment series for each .csp instance
+        # IDEALLY: keep only one instance in the woc data directory, to keep computation short.
+        for filename in os.listdir('woc_data'):
+            if filename.endswith('.csp'):
+                print(f"Running WoC experiment series for {filename}...")
 
-            print(f"Run {run_number} completed in {runtime} seconds.")
-            # Save the data of the best solution for this run
+                for woc_run in range(woc_runs):
+                    print(f"WoC Run number: {woc_run}")
+                    # And for each .csp instance, run the experiment series for the number of runs specified.
+
+
+                    woc_experiment_name = filename.removesuffix('.csp') + f'_woc_run_{woc_run}'
+
+
+                    for run_number in range(num_runs):
+                        print(f"\tCrowd member number: {run_number}")
+
+                        _ = time.perf_counter()
+                        solution = genetic_algorithm(filename, 
+                                    num_generations, 
+                                    snapshot_interval, 
+                                    mutation_rate, 
+                                    matchsum_threshold,
+                                    parents, 
+                                    run_number,
+                                    woc = True,
+                                    woc_run = woc_run)
+                        runtime = time.perf_counter() - _
+
+                        print(f"\tCrowd member {run_number} provided its answer in {runtime} seconds.")
+                        # Save the data of the best solution for this run.
+                        # Note that this is a separate method that appends the data to a CSV file in the experiment directory.
+                        solution.append_run_data(experiment_name = woc_experiment_name, 
+                                                    run_number = run_number, 
+                                                    run_time = runtime,
+                                                    woc = True
+                                                    )
+                        
+                        # See if we can free up memory by deleting the solution and forcing garbage collection...
+                        del solution
+                        gc.collect()
+                    # End gathering the crowd data for this run
+        # Done processing all runs for all crowd members
+        # Now we can aggregate the data for the wisdom of the crowds experiment.... Set the woc flag to True
+        aggregate_all(woc = True)
 
     #@profile # FOR MEMORY PROFILING LINE-BY-LINE
     def genetic_algorithm(filename,
@@ -1164,26 +1368,42 @@ def ga_gui():
                         parents, 
                         run_number,              # For labelling runs in the experiment directory
                         x_lower = None,
-                        x_upper = None
+                        x_upper = None,
+                        woc = False,
+                        woc_run = 0
                         ):
         # Initially, I had some memory accumulation that was an issue.
         # It's been resolved by NOT storing the heatmap data and avoiding plots in the generation for-loop
         # Thus, I probably have an excessive inclusion of gc.collect() and del statements.
         # I'm keeping them in for now, but I may remove them later if they're not necessary.
+        
+        if woc:
+            load_dir = 'woc_data/' + filename
+        else:
+            load_dir = 'data/' + filename
 
         # We initialize the problem with the filename, and the parameters for the genetic algorithm.
         csp = ClosestStringProblem(initialize_solution_population = True,
-                                    load_file = 'data/' + filename,
+                                    load_file = load_dir,
                                     snapshot_interval = snapshot_interval,
                                     mutation_rate = mutation_rate,
                                     matchsum_threshold = matchsum_threshold,
                                     parents = parents
                                     )
      
-        experiment_name = filename.removesuffix('.csp')
-        # Make experiment directory using experiment_name
-        if not os.path.exists(f"results/{experiment_name}"):
-            os.mkdir(f"results/{experiment_name}")
+        
+
+        if woc:
+            experiment_name = filename.removesuffix('.csp') + f'_woc_run_{woc_run}'
+            # Make experiment directory using experiment_name
+            if not os.path.exists(f"woc_results/{experiment_name}"):
+                os.mkdir(f"woc_results/{experiment_name}")
+
+        else:
+            experiment_name = filename.removesuffix('.csp')
+            # Make experiment directory using experiment_name
+            if not os.path.exists(f"results/{experiment_name}"):
+                os.mkdir(f"results/{experiment_name}")
 
         # The problem comes with a population of solution strings, which we can access via the solution_population attribute.
         # But we have two methods: 1) for evaluating the population fitness and 2) for updating the heatmap of matches, from which we get match-sums.
@@ -1212,12 +1432,12 @@ def ga_gui():
         # The following are our generations.
         ############################
         for i in range(num_generations + 1):
-            print(f"Generation {i}")
+            print(f"\t\tGeneration {i}")
 
             parents = copy.deepcopy(csp.select_parents())             # Parents selected after evaluation of fitness 
-            print(f"Parents selected. Reproducing...")
+            print(f"\t\tParents selected. Reproducing...")
             csp.reproduce(parents, i)                                 # Parents reproduce up to population size. Handles mutation, too. Mutation targets bottom 10% match-sum locations, via point mutations.
-            print(f"Reproduction complete. Evaluating fitness...")
+            print(f"\t\tReproduction complete. Evaluating fitness...")
             csp.evaluate_population_fitness(i)                        # After reproduction and mutation of offspring, evaluate fitness.
 
             # Find the best solution, if there is one, in this generation. Update overall best_by_average if necessary.
@@ -1261,7 +1481,11 @@ def ga_gui():
             del parents
             gc.collect()
 
-            best_by_average.append_fitness_data(i, "best_by_average", experiment_name = filename.removesuffix(".csp"), run_number = run_number)
+            best_by_average.append_fitness_data(i, 
+                                                "best_by_average",
+                                                experiment_name = experiment_name, 
+                                                run_number = run_number,
+                                                woc = True if woc else False)
 
         # delete the csp instance since we're done with it...
         del csp
@@ -1283,7 +1507,7 @@ def ga_gui():
     large_font = font.Font(size=24)
 
     # Labels and Entry fields for each parameter
-    tk.Label(root, text="Number of Runs", font=large_font).grid(row=0, column=0, padx=10, pady=5)
+    tk.Label(root, text="Number of Runs (N)", font=large_font).grid(row=0, column=0, padx=10, pady=5)
     num_runs_entry = tk.Entry(root, font=large_font)
     num_runs_entry.insert(0, "50") # default is 100 runs
     num_runs_entry.grid(row=0, column=1, padx=10, pady=5)
@@ -1316,33 +1540,28 @@ def ga_gui():
     # Population size!
     tk.Label(root, text="Population Size", font=large_font).grid(row=5, column=3, padx=10, pady=5)
     population_entry = tk.Entry(root, font=large_font)
-    population_entry.insert(0, "100") # default is 100 strings
+    population_entry.insert(0, "50") # default is 100 strings
     population_entry.grid(row=5, column=4, padx=10, pady=5)
 
     # Button to execute the GA, which will call the execute_all function; that iterates through all .csp instances in the data directory
     execute_button = tk.Button(root, text="Execute All", font=large_font, command=execute_all)
     execute_button.grid(row=6, column=0, columnspan=2, pady=10)
 
-    # Get filename for single runs
-    tk.Label(root, text="Filename", font=large_font).grid(row=7, column=0, padx=10, pady=5)
-    filename_entry = tk.Entry(root, font=large_font)
-    filename_entry.grid(row=7, column=1, padx=10, pady=5)
-
-    # Get lower_x for graph x_axis
-    tk.Label(root, text="Lower X", font=large_font).grid(row=8, column=0, padx=10, pady=5)
-    lower_x_entry = tk.Entry(root, font=large_font)
-    lower_x_entry.insert(0, "0") # default is 0
-    lower_x_entry.grid(row=8, column=1, padx=10, pady=5)
-
-    # Get upper_x for graph x_axis
-    tk.Label(root, text="Upper X", font=large_font).grid(row=9, column=0, padx=10, pady=5)
-    upper_x_entry = tk.Entry(root, font=large_font)
-    upper_x_entry.insert(0, "500") # default is 500
-    upper_x_entry.grid(row=9, column=1, padx=10, pady=5)
 
     # Button to execute the GA, which will call the execute_single function; that runs the GA for a single .csp instance
-    execute_single_button = tk.Button(root, text="Execute Single", font=large_font, command=execute_single)
-    execute_single_button.grid(row=10, column=0, columnspan=2, pady=10)
+    aggregate_all_button = tk.Button(root, text="Aggregate Solutions from N runs", font=large_font, command=aggregate_all)
+    aggregate_all_button.grid(row=10, column=0, columnspan=2, pady=10)
+
+    # Button to execute the GA, which will call the execute_single function; that runs the GA for a single .csp instance
+    woc_button = tk.Button(root, text="GA vs. GA+WoC", font=large_font, command=woc)
+    woc_button.grid(row=11, column=0, columnspan=2, pady=10)
+
+    # Field entry for woc runs
+    tk.Label(root, text="Number of WoC runs", font=large_font).grid(row=12, column=0, padx=10, pady=5)
+    woc_runs_entry = tk.Entry(root, font=large_font)
+    woc_runs_entry.insert(0, "10") # default is 10 runs
+    woc_runs_entry.grid(row=12, column=1, padx=10, pady=5)
+
 
 
     # Start the Tkinter event loop
